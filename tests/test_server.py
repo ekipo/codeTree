@@ -53,3 +53,22 @@ def test_get_symbol_not_found(sample_repo):
     fn = _get_tool_fn(mcp, "get_symbol")
     result = fn(file_path="calculator.py", symbol_name="nonexistent")
     assert "not found" in result.lower()
+
+
+# ---------------------------------------------------------------------------
+# Task 7: find_references
+# ---------------------------------------------------------------------------
+
+def test_find_references_finds_cross_file_usages(sample_repo):
+    mcp = create_server(str(sample_repo))
+    fn = _get_tool_fn(mcp, "find_references")
+    result = fn(symbol_name="Calculator")
+    assert "calculator.py" in result
+    assert "main.py" in result
+
+
+def test_find_references_no_results(sample_repo):
+    mcp = create_server(str(sample_repo))
+    fn = _get_tool_fn(mcp, "find_references")
+    result = fn(symbol_name="ThisSymbolDoesNotExist")
+    assert "no references" in result.lower() or result.strip() == ""
