@@ -74,3 +74,64 @@ def test_extract_calls_in_function():
 def test_extract_symbol_usages():
     usages = PLUGIN.extract_symbol_usages(SAMPLE, "Calculator")
     assert len(usages) >= 1
+
+
+# --- Arrow function / const function support (TypeScript) ---
+
+TS_ARROW_SAMPLE = b"""\
+export const double = (x: number): number => x * 2;
+
+export const add = (a: number, b: number): number => {
+    return a + b;
+};
+
+export default function App() {
+    return null;
+}
+
+const noop = () => {};
+"""
+
+
+def test_ts_skeleton_arrow_function():
+    result = PLUGIN.extract_skeleton(TS_ARROW_SAMPLE)
+    names = [item["name"] for item in result]
+    assert "double" in names
+    assert "add" in names
+
+
+def test_ts_skeleton_arrow_no_params():
+    result = PLUGIN.extract_skeleton(TS_ARROW_SAMPLE)
+    noop = next(item for item in result if item["name"] == "noop")
+    assert noop["params"] == "()"
+
+
+def test_ts_skeleton_export_default_function():
+    result = PLUGIN.extract_skeleton(TS_ARROW_SAMPLE)
+    names = [item["name"] for item in result]
+    assert "App" in names
+
+
+def test_ts_no_duplicates_arrow():
+    result = PLUGIN.extract_skeleton(TS_ARROW_SAMPLE)
+    keys = [(item["name"], item["line"]) for item in result]
+    assert len(keys) == len(set(keys))
+
+
+def test_ts_extract_symbol_arrow_function():
+    result = PLUGIN.extract_symbol_source(TS_ARROW_SAMPLE, "double")
+    assert result is not None
+    source, _ = result
+    assert "double" in source
+
+
+def test_ts_extract_calls_arrow_function():
+    source = b"""\
+const process = (data: number[]): number => {
+    const total = sum(data);
+    return format(total);
+};
+"""
+    calls = PLUGIN.extract_calls_in_function(source, "process")
+    assert "sum" in calls
+    assert "format" in calls

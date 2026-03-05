@@ -27,16 +27,19 @@ class TypeScriptPlugin(JavaScriptPlugin):
         tree = self._get_parser().parse(source)
         results = []
 
-        # Top-level classes (TS uses type_identifier for class names)
-        q = Query(lang, "(program (class_declaration name: (type_identifier) @name) @def)")
-        for _, m in _matches(q, tree.root_node):
-            results.append({
-                "type": "class",
-                "name": m["name"].text.decode("utf-8", errors="replace"),
-                "line": m["name"].start_point[0] + 1,
-                "parent": None,
-                "params": "",
-            })
+        # Top-level classes — plain and exported (export class Foo {})
+        for q_str in [
+            "(program (class_declaration name: (type_identifier) @name) @def)",
+            "(program (export_statement (class_declaration name: (type_identifier) @name) @def))",
+        ]:
+            for _, m in _matches(Query(lang, q_str), tree.root_node):
+                results.append({
+                    "type": "class",
+                    "name": m["name"].text.decode("utf-8", errors="replace"),
+                    "line": m["name"].start_point[0] + 1,
+                    "parent": None,
+                    "params": "",
+                })
 
         # Methods inside classes (TS still uses property_identifier for method names,
         # but type_identifier for the containing class name)
@@ -72,16 +75,19 @@ class TypeScriptPlugin(JavaScriptPlugin):
                 "params": m["params"].text.decode("utf-8", errors="replace"),
             })
 
-        # TypeScript interfaces
-        q = Query(lang, "(program (interface_declaration name: (type_identifier) @name) @def)")
-        for _, m in _matches(q, tree.root_node):
-            results.append({
-                "type": "interface",
-                "name": m["name"].text.decode("utf-8", errors="replace"),
-                "line": m["name"].start_point[0] + 1,
-                "parent": None,
-                "params": "",
-            })
+        # TypeScript interfaces — plain and exported (export interface Foo {})
+        for q_str in [
+            "(program (interface_declaration name: (type_identifier) @name) @def)",
+            "(program (export_statement (interface_declaration name: (type_identifier) @name) @def))",
+        ]:
+            for _, m in _matches(Query(lang, q_str), tree.root_node):
+                results.append({
+                    "type": "interface",
+                    "name": m["name"].text.decode("utf-8", errors="replace"),
+                    "line": m["name"].start_point[0] + 1,
+                    "parent": None,
+                    "params": "",
+                })
 
         # export default function foo() {}
         q = Query(lang, """
