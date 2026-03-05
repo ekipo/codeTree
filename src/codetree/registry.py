@@ -5,6 +5,7 @@ from .languages.javascript import JavaScriptPlugin
 from .languages.typescript import TypeScriptPlugin, TSXPlugin
 from .languages.go import GoPlugin
 from .languages.rust import RustPlugin
+from .languages.java import JavaPlugin
 
 # All supported file extensions mapped to plugin instances.
 # To add a new language: import its plugin and add its extensions here.
@@ -16,6 +17,8 @@ PLUGINS: dict[str, LanguagePlugin] = {
     ".tsx": TSXPlugin(),
     ".go":  GoPlugin(),
     ".rs":  RustPlugin(),
+    ".java": JavaPlugin(),
+    ".kt":  JavaPlugin(),
 }
 
 
