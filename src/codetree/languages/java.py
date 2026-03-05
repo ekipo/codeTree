@@ -64,18 +64,50 @@ class JavaPlugin(LanguagePlugin):
                 "params": m["params"].text.decode("utf-8", errors="replace"),
             })
 
+        # Interfaces (top-level)
+        q = Query(_LANGUAGE, "(program (interface_declaration name: (identifier) @name) @def)")
+        for _, m in _matches(q, tree.root_node):
+            results.append({
+                "type": "interface",
+                "name": m["name"].text.decode("utf-8", errors="replace"),
+                "line": m["name"].start_point[0] + 1,
+                "parent": None,
+                "params": "",
+            })
+
+        # Methods inside interfaces
+        q = Query(_LANGUAGE, """
+            (interface_declaration
+                name: (identifier) @class_name
+                body: (interface_body
+                    (method_declaration
+                        name: (identifier) @method_name
+                        parameters: (formal_parameters) @params)))
+        """)
+        for _, m in _matches(q, tree.root_node):
+            results.append({
+                "type": "method",
+                "name": m["method_name"].text.decode("utf-8", errors="replace"),
+                "line": m["method_name"].start_point[0] + 1,
+                "parent": m["class_name"].text.decode("utf-8", errors="replace"),
+                "params": m["params"].text.decode("utf-8", errors="replace"),
+            })
+
         results.sort(key=lambda x: x["line"])
         return results
 
     def extract_symbol_source(self, source: bytes, name: str) -> tuple[str, int] | None:
         tree = _parse(source)
 
-        # Classes
-        q = Query(_LANGUAGE, "(class_declaration name: (identifier) @name) @def")
-        for _, m in _matches(q, tree.root_node):
-            if m["name"].text.decode("utf-8", errors="replace") == name:
-                node = m["def"]
-                return source[node.start_byte:node.end_byte].decode("utf-8", errors="replace"), node.start_point[0] + 1
+        # Classes and interfaces
+        for q_str in [
+            "(class_declaration name: (identifier) @name) @def",
+            "(interface_declaration name: (identifier) @name) @def",
+        ]:
+            for _, m in _matches(Query(_LANGUAGE, q_str), tree.root_node):
+                if m["name"].text.decode("utf-8", errors="replace") == name:
+                    node = m["def"]
+                    return source[node.start_byte:node.end_byte].decode("utf-8", errors="replace"), node.start_point[0] + 1
 
         # Methods
         q = Query(_LANGUAGE, "(method_declaration name: (identifier) @name) @def")

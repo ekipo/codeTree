@@ -98,6 +98,7 @@ class RustPlugin(LanguagePlugin):
             (call_expression function: [
                 (identifier) @called
                 (field_expression field: (field_identifier) @called)
+                (scoped_identifier name: (identifier) @called)
             ])
         """)
         calls = set()

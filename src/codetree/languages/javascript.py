@@ -42,16 +42,19 @@ class JavaScriptPlugin(LanguagePlugin):
         tree = self._get_parser().parse(source)
         results = []
 
-        # Top-level classes
-        q = Query(lang, "(program (class_declaration name: (identifier) @name) @def)")
-        for _, m in _matches(q, tree.root_node):
-            results.append({
-                "type": "class",
-                "name": m["name"].text.decode("utf-8", errors="replace"),
-                "line": m["name"].start_point[0] + 1,
-                "parent": None,
-                "params": "",
-            })
+        # Top-level classes — plain and exported (export class Foo {})
+        for q_str in [
+            "(program (class_declaration name: (identifier) @name) @def)",
+            "(program (export_statement (class_declaration name: (identifier) @name) @def))",
+        ]:
+            for _, m in _matches(Query(lang, q_str), tree.root_node):
+                results.append({
+                    "type": "class",
+                    "name": m["name"].text.decode("utf-8", errors="replace"),
+                    "line": m["name"].start_point[0] + 1,
+                    "parent": None,
+                    "params": "",
+                })
 
         # Methods inside classes
         q = Query(lang, """
@@ -86,12 +89,31 @@ class JavaScriptPlugin(LanguagePlugin):
                 "params": m["params"].text.decode("utf-8", errors="replace"),
             })
 
-        # export default function foo() {}
-        q = Query(lang, """
-            (program (export_statement
+        # export default/named function foo() {} and export function* gen() {}
+        for q_str in [
+            """(program (export_statement
                 (function_declaration
                     name: (identifier) @name
-                    parameters: (formal_parameters) @params) @def))
+                    parameters: (formal_parameters) @params) @def))""",
+            """(program (export_statement
+                (generator_function_declaration
+                    name: (identifier) @name
+                    parameters: (formal_parameters) @params) @def))""",
+        ]:
+            for _, m in _matches(Query(lang, q_str), tree.root_node):
+                results.append({
+                    "type": "function",
+                    "name": m["name"].text.decode("utf-8", errors="replace"),
+                    "line": m["name"].start_point[0] + 1,
+                    "parent": None,
+                    "params": m["params"].text.decode("utf-8", errors="replace"),
+                })
+
+        # Generator functions: function* gen() {}
+        q = Query(lang, """
+            (program (generator_function_declaration
+                name: (identifier) @name
+                parameters: (formal_parameters) @params))
         """)
         for _, m in _matches(q, tree.root_node):
             results.append({
@@ -140,12 +162,14 @@ class JavaScriptPlugin(LanguagePlugin):
         lang = self._get_language()
         tree = self._get_parser().parse(source)
 
-        # function_declaration and class_declaration (plain and export default)
+        # function/class/generator declarations (plain and exported)
         for q_str in [
             "(function_declaration name: (identifier) @name) @def",
             "(class_declaration name: (identifier) @name) @def",
+            "(generator_function_declaration name: (identifier) @name) @def",
             "(export_statement (function_declaration name: (identifier) @name) @def)",
             "(export_statement (class_declaration name: (identifier) @name) @def)",
+            "(export_statement (generator_function_declaration name: (identifier) @name) @def)",
         ]:
             for _, m in _matches(Query(lang, q_str), tree.root_node):
                 if m["name"].text.decode("utf-8", errors="replace") == name:
@@ -181,10 +205,12 @@ class JavaScriptPlugin(LanguagePlugin):
         tree = self._get_parser().parse(source)
         fn_node = None
 
-        # function_declaration (plain and export default)
+        # function_declaration and generator_function_declaration (plain and exported)
         for q_str in [
             "(function_declaration name: (identifier) @name) @def",
+            "(generator_function_declaration name: (identifier) @name) @def",
             "(export_statement (function_declaration name: (identifier) @name) @def)",
+            "(export_statement (generator_function_declaration name: (identifier) @name) @def)",
         ]:
             for _, m in _matches(Query(lang, q_str), tree.root_node):
                 if m["name"].text.decode("utf-8", errors="replace") == fn_name:

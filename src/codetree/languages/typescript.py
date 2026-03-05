@@ -41,13 +41,50 @@ class TypeScriptPlugin(JavaScriptPlugin):
                     "params": "",
                 })
 
-        # Methods inside classes (TS still uses property_identifier for method names,
-        # but type_identifier for the containing class name)
-        q = Query(lang, """
-            (class_declaration
+        # Abstract classes — plain and exported (abstract class Base {})
+        for q_str in [
+            "(program (abstract_class_declaration name: (type_identifier) @name) @def)",
+            "(program (export_statement (abstract_class_declaration name: (type_identifier) @name) @def))",
+        ]:
+            for _, m in _matches(Query(lang, q_str), tree.root_node):
+                results.append({
+                    "type": "class",
+                    "name": m["name"].text.decode("utf-8", errors="replace"),
+                    "line": m["name"].start_point[0] + 1,
+                    "parent": None,
+                    "params": "",
+                })
+
+        # Methods inside regular and abstract classes
+        for q_str in [
+            """(class_declaration
                 name: (type_identifier) @class_name
                 body: (class_body
                     (method_definition
+                        name: (property_identifier) @method_name
+                        parameters: (formal_parameters) @params)))""",
+            """(abstract_class_declaration
+                name: (type_identifier) @class_name
+                body: (class_body
+                    (method_definition
+                        name: (property_identifier) @method_name
+                        parameters: (formal_parameters) @params)))""",
+        ]:
+            for _, m in _matches(Query(lang, q_str), tree.root_node):
+                results.append({
+                    "type": "method",
+                    "name": m["method_name"].text.decode("utf-8", errors="replace"),
+                    "line": m["method_name"].start_point[0] + 1,
+                    "parent": m["class_name"].text.decode("utf-8", errors="replace"),
+                    "params": m["params"].text.decode("utf-8", errors="replace"),
+                })
+
+        # Abstract method signatures (no body, e.g. abstract doWork(): void;)
+        q = Query(lang, """
+            (abstract_class_declaration
+                name: (type_identifier) @class_name
+                body: (class_body
+                    (abstract_method_signature
                         name: (property_identifier) @method_name
                         parameters: (formal_parameters) @params)))
         """)
@@ -143,12 +180,14 @@ class TypeScriptPlugin(JavaScriptPlugin):
         lang = self._get_language()
         tree = self._get_parser().parse(source)
 
-        # function_declaration and class_declaration (plain and export default)
+        # function/class/abstract-class declarations (plain and exported)
         for q_str in [
             "(function_declaration name: (identifier) @name) @def",
             "(class_declaration name: (type_identifier) @name) @def",
+            "(abstract_class_declaration name: (type_identifier) @name) @def",
             "(export_statement (function_declaration name: (identifier) @name) @def)",
             "(export_statement (class_declaration name: (type_identifier) @name) @def)",
+            "(export_statement (abstract_class_declaration name: (type_identifier) @name) @def)",
         ]:
             for _, m in _matches(Query(lang, q_str), tree.root_node):
                 if m["name"].text.decode("utf-8", errors="replace") == name:
