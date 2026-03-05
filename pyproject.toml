@@ -1,0 +1,19 @@
+[project]
+name = "codetree"
+version = "0.1.0"
+requires-python = ">=3.10"
+dependencies = [
+    "tree-sitter>=0.23.0",
+    "tree-sitter-python>=0.23.0",
+    "fastmcp>=2.0.0",
+]
+
+[project.scripts]
+codetree = "codetree.__main__:main"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
