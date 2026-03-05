@@ -26,11 +26,18 @@ class Indexer:
         return [entry.path for entry in self._index.values()]
 
     def build(self, cached_mtimes: dict[str, float] | None = None):
-        """Parse all .py files under root and build the index."""
+        """Parse all .py files under root and build the index.
+
+        Files whose relative path and mtime appear in cached_mtimes are skipped
+        (their skeleton is loaded from the cache by the caller and injected separately).
+        """
         cached_mtimes = cached_mtimes or {}
         for py_file in self.root.rglob("*.py"):
             rel = str(py_file.relative_to(self.root))
             mtime = py_file.stat().st_mtime
+            if cached_mtimes.get(rel) == mtime:
+                # File unchanged — caller will inject cached skeleton
+                continue
             source = py_file.read_bytes()
             skeleton = extract_skeleton(source)
             self._index[rel] = FileEntry(
@@ -39,6 +46,15 @@ class Indexer:
                 skeleton=skeleton,
                 mtime=mtime,
             )
+
+    def inject_cached(self, rel_path: str, py_file: Path, source: bytes, skeleton: list[dict], mtime: float):
+        """Inject a pre-computed entry (from cache) without re-parsing."""
+        self._index[rel_path] = FileEntry(
+            path=py_file,
+            source=source,
+            skeleton=skeleton,
+            mtime=mtime,
+        )
 
     def get_skeleton(self, rel_path: str) -> list[dict]:
         entry = self._index.get(rel_path)

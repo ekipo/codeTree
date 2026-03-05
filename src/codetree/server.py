@@ -1,11 +1,46 @@
 from fastmcp import FastMCP
+from pathlib import Path
 from .indexer import Indexer
+from .cache import Cache
 
 
 def create_server(root: str) -> FastMCP:
     mcp = FastMCP("codetree")
+    root_path = Path(root)
+
+    # Load cache
+    cache = Cache(root)
+    cache.load()
+
+    # Build index, skipping unchanged files
+    cached_mtimes = {
+        k: v["mtime"] for k, v in (cache._data or {}).items()
+    }
     indexer = Indexer(root)
-    indexer.build()
+    indexer.build(cached_mtimes=cached_mtimes)
+
+    # Inject cached entries for unchanged files
+    for rel_path, entry_data in (cache._data or {}).items():
+        if rel_path not in {str(f.relative_to(root_path)) for f in indexer.files}:
+            py_file = root_path / rel_path
+            if py_file.exists():
+                mtime = py_file.stat().st_mtime
+                if cache.is_valid(rel_path, mtime):
+                    indexer.inject_cached(
+                        rel_path=rel_path,
+                        py_file=py_file,
+                        source=py_file.read_bytes(),
+                        skeleton=entry_data.get("skeleton", []),
+                        mtime=mtime,
+                    )
+
+    # Save updated cache
+    for rel_path, file_entry in indexer._index.items():
+        cache.set(rel_path, {
+            "mtime": file_entry.mtime,
+            "skeleton": file_entry.skeleton,
+        })
+    cache.save()
 
     @mcp.tool()
     def get_file_skeleton(file_path: str) -> str:
