@@ -1,11 +1,14 @@
 from pathlib import Path
 from .languages.base import LanguagePlugin
 from .languages.python import PythonPlugin
+from .languages.javascript import JavaScriptPlugin
 
 # All supported file extensions mapped to plugin instances.
 # To add a new language: import its plugin and add its extensions here.
 PLUGINS: dict[str, LanguagePlugin] = {
-    ".py": PythonPlugin(),
+    ".py":  PythonPlugin(),
+    ".js":  JavaScriptPlugin(),
+    ".jsx": JavaScriptPlugin(),
 }
 
 
