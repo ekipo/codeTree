@@ -33,6 +33,22 @@ class GoPlugin(LanguagePlugin):
                 "params": "",
             })
 
+        # Interfaces
+        q = Query(_LANGUAGE, """
+            (source_file
+                (type_declaration
+                    (type_spec name: (type_identifier) @name
+                               type: (interface_type))) @def)
+        """)
+        for _, m in _matches(q, tree.root_node):
+            results.append({
+                "type": "interface",
+                "name": m["name"].text.decode("utf-8", errors="replace"),
+                "line": m["name"].start_point[0] + 1,
+                "parent": None,
+                "params": "",
+            })
+
         # Methods (receiver functions)
         q = Query(_LANGUAGE, """
             (method_declaration

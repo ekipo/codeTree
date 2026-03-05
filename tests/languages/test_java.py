@@ -68,3 +68,28 @@ def test_extract_calls_in_function():
 def test_extract_symbol_usages():
     usages = PLUGIN.extract_symbol_usages(SAMPLE, "Calculator")
     assert len(usages) >= 1
+
+
+CONSTRUCTOR_SAMPLE = b"""\
+public class Service {
+    private String name;
+    public Service(String name) {
+        this.name = name;
+        init();
+    }
+    public void init() {}
+}
+"""
+
+
+def test_skeleton_finds_constructor():
+    result = PLUGIN.extract_skeleton(CONSTRUCTOR_SAMPLE)
+    names = [item["name"] for item in result]
+    assert "Service" in names
+    ctors = [item for item in result if item["name"] == "Service" and item["parent"] == "Service"]
+    assert len(ctors) == 1
+
+
+def test_extract_calls_in_constructor():
+    calls = PLUGIN.extract_calls_in_function(CONSTRUCTOR_SAMPLE, "Service")
+    assert "init" in calls

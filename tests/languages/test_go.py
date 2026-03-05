@@ -75,3 +75,23 @@ def test_extract_calls_in_function():
 def test_extract_symbol_usages():
     usages = PLUGIN.extract_symbol_usages(SAMPLE, "Calculator")
     assert len(usages) >= 1
+
+
+INTERFACE_SAMPLE = b"""\
+package io
+
+type Reader interface {
+    Read(p []byte) (n int, err error)
+}
+
+type ReadWriter interface {
+    Read(p []byte) (n int, err error)
+    Write(p []byte) (n int, err error)
+}
+"""
+
+
+def test_skeleton_finds_interface():
+    result = PLUGIN.extract_skeleton(INTERFACE_SAMPLE)
+    assert any(item["type"] == "interface" and item["name"] == "Reader" for item in result)
+    assert any(item["type"] == "interface" and item["name"] == "ReadWriter" for item in result)

@@ -46,6 +46,24 @@ class JavaPlugin(LanguagePlugin):
                 "params": m["params"].text.decode("utf-8", errors="replace"),
             })
 
+        # Constructors inside classes
+        q = Query(_LANGUAGE, """
+            (class_declaration
+                name: (identifier) @class_name
+                body: (class_body
+                    (constructor_declaration
+                        name: (identifier) @ctor_name
+                        parameters: (formal_parameters) @params)))
+        """)
+        for _, m in _matches(q, tree.root_node):
+            results.append({
+                "type": "method",
+                "name": m["ctor_name"].text.decode("utf-8", errors="replace"),
+                "line": m["ctor_name"].start_point[0] + 1,
+                "parent": m["class_name"].text.decode("utf-8", errors="replace"),
+                "params": m["params"].text.decode("utf-8", errors="replace"),
+            })
+
         results.sort(key=lambda x: x["line"])
         return results
 
@@ -66,15 +84,27 @@ class JavaPlugin(LanguagePlugin):
                 node = m["def"]
                 return source[node.start_byte:node.end_byte].decode("utf-8", errors="replace"), node.start_point[0] + 1
 
+        # Constructors
+        q = Query(_LANGUAGE, "(constructor_declaration name: (identifier) @name) @def")
+        for _, m in _matches(q, tree.root_node):
+            if m["name"].text.decode("utf-8", errors="replace") == name:
+                node = m["def"]
+                return source[node.start_byte:node.end_byte].decode("utf-8", errors="replace"), node.start_point[0] + 1
+
         return None
 
     def extract_calls_in_function(self, source: bytes, fn_name: str) -> list[str]:
         tree = _parse(source)
         fn_node = None
-        q = Query(_LANGUAGE, "(method_declaration name: (identifier) @name) @def")
-        for _, m in _matches(q, tree.root_node):
-            if m["name"].text.decode("utf-8", errors="replace") == fn_name:
-                fn_node = m["def"]
+        for q_str in [
+            "(method_declaration name: (identifier) @name) @def",
+            "(constructor_declaration name: (identifier) @name) @def",
+        ]:
+            for _, m in _matches(Query(_LANGUAGE, q_str), tree.root_node):
+                if m["name"].text.decode("utf-8", errors="replace") == fn_name:
+                    fn_node = m["def"]
+                    break
+            if fn_node:
                 break
         if fn_node is None:
             return []
