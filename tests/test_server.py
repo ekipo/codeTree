@@ -34,3 +34,22 @@ def test_get_file_skeleton_unknown_file(sample_repo):
     fn = _get_tool_fn(mcp, "get_file_skeleton")
     result = fn(file_path="nonexistent.py")
     assert "not found" in result.lower() or result.strip() == ""
+
+
+# ---------------------------------------------------------------------------
+# Task 6: get_symbol
+# ---------------------------------------------------------------------------
+
+def test_get_symbol_returns_function_source(sample_repo):
+    mcp = create_server(str(sample_repo))
+    fn = _get_tool_fn(mcp, "get_symbol")
+    result = fn(file_path="calculator.py", symbol_name="divide")
+    assert "def divide" in result
+    assert "ValueError" in result
+
+
+def test_get_symbol_not_found(sample_repo):
+    mcp = create_server(str(sample_repo))
+    fn = _get_tool_fn(mcp, "get_symbol")
+    result = fn(file_path="calculator.py", symbol_name="nonexistent")
+    assert "not found" in result.lower()
