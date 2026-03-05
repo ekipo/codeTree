@@ -1,6 +1,6 @@
 from tree_sitter import Language, Parser, Query
 import tree_sitter_java as tsjava
-from .base import LanguagePlugin, _matches
+from .base import LanguagePlugin, _matches, _fill_docs_from_siblings
 
 _LANGUAGE = Language(tsjava.language())
 _PARSER = Parser(_LANGUAGE)
@@ -75,6 +75,36 @@ class JavaPlugin(LanguagePlugin):
                 "params": "",
             })
 
+        # Enums (top-level)
+        q = Query(_LANGUAGE, "(program (enum_declaration name: (identifier) @name) @def)")
+        for _, m in _matches(q, tree.root_node):
+            results.append({
+                "type": "enum",
+                "name": m["name"].text.decode("utf-8", errors="replace"),
+                "line": m["name"].start_point[0] + 1,
+                "parent": None,
+                "params": "",
+            })
+
+        # Methods inside enums (live under enum_body > enum_body_declarations)
+        q = Query(_LANGUAGE, """
+            (enum_declaration
+                name: (identifier) @class_name
+                body: (enum_body
+                    (enum_body_declarations
+                        (method_declaration
+                            name: (identifier) @method_name
+                            parameters: (formal_parameters) @params))))
+        """)
+        for _, m in _matches(q, tree.root_node):
+            results.append({
+                "type": "method",
+                "name": m["method_name"].text.decode("utf-8", errors="replace"),
+                "line": m["method_name"].start_point[0] + 1,
+                "parent": m["class_name"].text.decode("utf-8", errors="replace"),
+                "params": m["params"].text.decode("utf-8", errors="replace"),
+            })
+
         # Methods inside interfaces
         q = Query(_LANGUAGE, """
             (interface_declaration
@@ -93,16 +123,27 @@ class JavaPlugin(LanguagePlugin):
                 "params": m["params"].text.decode("utf-8", errors="replace"),
             })
 
+        # Fill doc fields from preceding comments
+        for item in results:
+            item.setdefault("doc", "")
+        _fill_docs_from_siblings(results, tree.root_node, _LANGUAGE, [
+            "(class_declaration name: (identifier) @name) @def",
+            "(interface_declaration name: (identifier) @name) @def",
+            "(enum_declaration name: (identifier) @name) @def",
+            "(method_declaration name: (identifier) @name) @def",
+        ])
+
         results.sort(key=lambda x: x["line"])
         return results
 
     def extract_symbol_source(self, source: bytes, name: str) -> tuple[str, int] | None:
         tree = _parse(source)
 
-        # Classes and interfaces
+        # Classes, interfaces, and enums
         for q_str in [
             "(class_declaration name: (identifier) @name) @def",
             "(interface_declaration name: (identifier) @name) @def",
+            "(enum_declaration name: (identifier) @name) @def",
         ]:
             for _, m in _matches(Query(_LANGUAGE, q_str), tree.root_node):
                 if m["name"].text.decode("utf-8", errors="replace") == name:
@@ -168,3 +209,62 @@ class JavaPlugin(LanguagePlugin):
                     usages.append({"line": node.start_point[0] + 1, "col": node.start_point[1]})
         usages.sort(key=lambda x: (x["line"], x["col"]))
         return usages
+
+    def extract_imports(self, source: bytes) -> list[dict]:
+        tree = _parse(source)
+        results = []
+        q = Query(_LANGUAGE, "(program (import_declaration) @imp)")
+        for _, m in _matches(q, tree.root_node):
+            node = m["imp"]
+            results.append({
+                "line": node.start_point[0] + 1,
+                "text": node.text.decode("utf-8", errors="replace").strip(),
+            })
+        results.sort(key=lambda x: x["line"])
+        return results
+
+    def compute_complexity(self, source: bytes, fn_name: str) -> dict | None:
+        tree = _parse(source)
+        fn_node = None
+        for q_str in [
+            "(method_declaration name: (identifier) @name) @def",
+            "(constructor_declaration name: (identifier) @name) @def",
+        ]:
+            for _, m in _matches(Query(_LANGUAGE, q_str), tree.root_node):
+                if m["name"].text.decode("utf-8", errors="replace") == fn_name:
+                    fn_node = m["def"]
+                    break
+            if fn_node:
+                break
+        if fn_node is None:
+            return None
+
+        branch_map = {
+            "if_statement": "if",
+            "for_statement": "for",
+            "enhanced_for_statement": "for_each",
+            "while_statement": "while",
+            "do_statement": "do_while",
+            "catch_clause": "catch",
+            "switch_block_statement_group": "case",
+            "ternary_expression": "ternary",
+        }
+        counts: dict[str, int] = {}
+
+        def walk(node):
+            if node.type in branch_map:
+                label = branch_map[node.type]
+                counts[label] = counts.get(label, 0) + 1
+            elif node.type == "binary_expression":
+                for child in node.children:
+                    if child.type in ("&&", "||"):
+                        counts[child.type] = counts.get(child.type, 0) + 1
+            for child in node.children:
+                walk(child)
+
+        walk(fn_node)
+        total = 1 + sum(counts.values())
+        return {"total": total, "breakdown": counts}
+
+    def check_syntax(self, source: bytes) -> bool:
+        return _parse(source).root_node.has_error

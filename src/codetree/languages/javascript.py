@@ -1,6 +1,6 @@
 from tree_sitter import Language, Parser, Query
 import tree_sitter_javascript as tsjs
-from .base import LanguagePlugin, _matches
+from .base import LanguagePlugin, _matches, _fill_docs_from_siblings
 
 _LANGUAGE = Language(tsjs.language())
 _PARSER = Parser(_LANGUAGE)
@@ -146,6 +146,16 @@ class JavaScriptPlugin(LanguagePlugin):
                     "params": _arrow_params(fn_node) if fn_node else "()",
                 })
 
+        # Fill doc fields from preceding comments
+        for item in results:
+            item.setdefault("doc", "")
+        _fill_docs_from_siblings(results, tree.root_node, lang, [
+            "(function_declaration name: (identifier) @name) @def",
+            "(class_declaration name: (identifier) @name) @def",
+            "(export_statement (function_declaration name: (identifier) @name) @def)",
+            "(export_statement (class_declaration name: (identifier) @name) @def)",
+        ])
+
         # Deduplicate by (name, line)
         seen = set()
         deduped = []
@@ -198,6 +208,16 @@ class JavaScriptPlugin(LanguagePlugin):
                         node.start_point[0] + 1,
                     )
 
+        # Methods inside classes (method_definition)
+        q = Query(lang, "(method_definition name: (property_identifier) @name) @def")
+        for _, m in _matches(q, tree.root_node):
+            if m["name"].text.decode("utf-8", errors="replace") == name:
+                node = m["def"]
+                return (
+                    source[node.start_byte:node.end_byte].decode("utf-8", errors="replace"),
+                    node.start_point[0] + 1,
+                )
+
         return None
 
     def extract_calls_in_function(self, source: bytes, fn_name: str) -> list[str]:
@@ -233,6 +253,14 @@ class JavaScriptPlugin(LanguagePlugin):
                 if fn_node:
                     break
 
+        # Methods inside classes
+        if fn_node is None:
+            q = Query(lang, "(method_definition name: (property_identifier) @name) @def")
+            for _, m in _matches(q, tree.root_node):
+                if m["name"].text.decode("utf-8", errors="replace") == fn_name:
+                    fn_node = m["def"]
+                    break
+
         if fn_node is None:
             return []
 
@@ -259,3 +287,88 @@ class JavaScriptPlugin(LanguagePlugin):
             node = m["name"]
             usages.append({"line": node.start_point[0] + 1, "col": node.start_point[1]})
         return usages
+
+    def extract_imports(self, source: bytes) -> list[dict]:
+        lang = self._get_language()
+        tree = self._get_parser().parse(source)
+        results = []
+        q = Query(lang, "(program (import_statement) @imp)")
+        for _, m in _matches(q, tree.root_node):
+            node = m["imp"]
+            results.append({
+                "line": node.start_point[0] + 1,
+                "text": node.text.decode("utf-8", errors="replace").strip(),
+            })
+        results.sort(key=lambda x: x["line"])
+        return results
+
+    def compute_complexity(self, source: bytes, fn_name: str) -> dict | None:
+        lang = self._get_language()
+        tree = self._get_parser().parse(source)
+        fn_node = None
+
+        for q_str in [
+            "(function_declaration name: (identifier) @name) @def",
+            "(generator_function_declaration name: (identifier) @name) @def",
+            "(export_statement (function_declaration name: (identifier) @name) @def)",
+            "(export_statement (generator_function_declaration name: (identifier) @name) @def)",
+        ]:
+            for _, m in _matches(Query(lang, q_str), tree.root_node):
+                if m["name"].text.decode("utf-8", errors="replace") == fn_name:
+                    fn_node = m["def"]
+                    break
+            if fn_node:
+                break
+
+        if fn_node is None:
+            for q_str in [
+                """(variable_declarator
+                    name: (identifier) @name
+                    value: [(arrow_function) @def (function_expression) @def])""",
+            ]:
+                for _, m in _matches(Query(lang, q_str), tree.root_node):
+                    if m["name"].text.decode("utf-8", errors="replace") == fn_name:
+                        fn_node = m["def"]
+                        break
+                if fn_node:
+                    break
+
+        if fn_node is None:
+            q = Query(lang, "(method_definition name: (property_identifier) @name) @def")
+            for _, m in _matches(q, tree.root_node):
+                if m["name"].text.decode("utf-8", errors="replace") == fn_name:
+                    fn_node = m["def"]
+                    break
+
+        if fn_node is None:
+            return None
+
+        branch_map = {
+            "if_statement": "if",
+            "for_statement": "for",
+            "for_in_statement": "for_in",
+            "while_statement": "while",
+            "do_statement": "do_while",
+            "switch_case": "case",
+            "catch_clause": "catch",
+            "ternary_expression": "ternary",
+        }
+        counts: dict[str, int] = {}
+
+        def walk(node):
+            if node.type in branch_map:
+                label = branch_map[node.type]
+                counts[label] = counts.get(label, 0) + 1
+            elif node.type == "binary_expression":
+                for child in node.children:
+                    if child.type in ("&&", "||"):
+                        counts[child.type] = counts.get(child.type, 0) + 1
+            for child in node.children:
+                walk(child)
+
+        walk(fn_node)
+        total = 1 + sum(counts.values())
+        return {"total": total, "breakdown": counts}
+
+    def check_syntax(self, source: bytes) -> bool:
+        return self._get_parser().parse(source).root_node.has_error
