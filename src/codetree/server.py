@@ -19,9 +19,12 @@ def create_server(root: str) -> FastMCP:
     indexer = Indexer(root)
     indexer.build(cached_mtimes=cached_mtimes)
 
-    # Inject cached entries for unchanged files
+    # Inject cached entries for unchanged files (skip ignored dirs)
+    indexed = {str(f.relative_to(root_path)) for f in indexer.files}
     for rel_path, entry_data in (cache._data or {}).items():
-        if rel_path not in {str(f.relative_to(root_path)) for f in indexer.files}:
+        if indexer._should_skip(Path(rel_path)):
+            continue
+        if rel_path not in indexed:
             py_file = root_path / rel_path
             if py_file.exists():
                 mtime = py_file.stat().st_mtime

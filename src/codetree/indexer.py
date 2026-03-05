@@ -1,11 +1,7 @@
 from pathlib import Path
 from dataclasses import dataclass
-from .queries import (
-    extract_skeleton,
-    extract_symbol_source,
-    extract_calls_in_function,
-    extract_symbol_usages,
-)
+from .languages.base import LanguagePlugin
+from .registry import get_plugin
 
 
 @dataclass
@@ -14,6 +10,8 @@ class FileEntry:
     source: bytes
     skeleton: list[dict]
     mtime: float
+    language: str
+    plugin: LanguagePlugin
 
 
 class Indexer:
@@ -25,73 +23,83 @@ class Indexer:
     def files(self) -> list[Path]:
         return [entry.path for entry in self._index.values()]
 
-    def build(self, cached_mtimes: dict[str, float] | None = None):
-        """Parse all .py files under root and build the index.
+    SKIP_DIRS = {
+        ".venv", "venv", "env", ".env",
+        "__pycache__", ".git", ".hg", ".svn",
+        "node_modules", ".tox", ".mypy_cache",
+        ".pytest_cache", "dist", "build", "*.egg-info",
+    }
 
-        Files whose relative path and mtime appear in cached_mtimes are skipped
-        (their skeleton is loaded from the cache by the caller and injected separately).
+    def _should_skip(self, path: Path) -> bool:
+        return any(part in self.SKIP_DIRS for part in path.parts)
+
+    def build(self, cached_mtimes: dict[str, float] | None = None):
+        """Index all supported files under root, skipping non-project dirs.
+
+        Files whose path+mtime appear in cached_mtimes are skipped;
+        the caller injects them via inject_cached().
         """
         cached_mtimes = cached_mtimes or {}
-        for py_file in self.root.rglob("*.py"):
-            rel = str(py_file.relative_to(self.root))
-            mtime = py_file.stat().st_mtime
-            if cached_mtimes.get(rel) == mtime:
-                # File unchanged — caller will inject cached skeleton
+        for candidate in self.root.rglob("*"):
+            if not candidate.is_file():
                 continue
-            source = py_file.read_bytes()
-            skeleton = extract_skeleton(source)
+            plugin = get_plugin(candidate)
+            if plugin is None:
+                continue
+            if self._should_skip(candidate.relative_to(self.root)):
+                continue
+            rel = str(candidate.relative_to(self.root))
+            mtime = candidate.stat().st_mtime
+            if cached_mtimes.get(rel) == mtime:
+                continue
+            source = candidate.read_bytes()
+            skeleton = plugin.extract_skeleton(source)
             self._index[rel] = FileEntry(
-                path=py_file,
+                path=candidate,
                 source=source,
                 skeleton=skeleton,
                 mtime=mtime,
+                language=candidate.suffix.lstrip("."),
+                plugin=plugin,
             )
 
-    def inject_cached(self, rel_path: str, py_file: Path, source: bytes, skeleton: list[dict], mtime: float):
+    def inject_cached(self, rel_path: str, py_file: Path, source: bytes,
+                      skeleton: list[dict], mtime: float):
         """Inject a pre-computed entry (from cache) without re-parsing."""
+        plugin = get_plugin(py_file)
+        if plugin is None:
+            return
         self._index[rel_path] = FileEntry(
             path=py_file,
             source=source,
             skeleton=skeleton,
             mtime=mtime,
+            language=py_file.suffix.lstrip("."),
+            plugin=plugin,
         )
 
     def get_skeleton(self, rel_path: str) -> list[dict]:
         entry = self._index.get(rel_path)
-        if entry is None:
-            return []
-        return entry.skeleton
+        return entry.skeleton if entry else []
 
     def get_symbol(self, rel_path: str, symbol_name: str) -> tuple[str, int] | None:
         entry = self._index.get(rel_path)
         if entry is None:
             return None
-        return extract_symbol_source(entry.source, symbol_name)
+        return entry.plugin.extract_symbol_source(entry.source, symbol_name)
 
     def find_references(self, symbol_name: str) -> list[dict]:
-        """Find all usages of symbol_name across all indexed files."""
         results = []
         for rel_path, entry in self._index.items():
-            usages = extract_symbol_usages(entry.source, symbol_name)
-            for u in usages:
-                results.append({
-                    "file": rel_path,
-                    "line": u["line"],
-                    "col": u["col"],
-                })
+            for u in entry.plugin.extract_symbol_usages(entry.source, symbol_name):
+                results.append({"file": rel_path, "line": u["line"], "col": u["col"]})
         return results
 
     def get_call_graph(self, rel_path: str, function_name: str) -> dict:
-        """Return what function_name calls and what calls function_name across repo."""
         entry = self._index.get(rel_path)
-        calls = []
-        if entry:
-            calls = extract_calls_in_function(entry.source, function_name)
-
+        calls = entry.plugin.extract_calls_in_function(entry.source, function_name) if entry else []
         callers = []
         for rp, e in self._index.items():
-            usages = extract_symbol_usages(e.source, function_name)
-            for u in usages:
+            for u in e.plugin.extract_symbol_usages(e.source, function_name):
                 callers.append({"file": rp, "line": u["line"]})
-
         return {"calls": calls, "callers": callers}

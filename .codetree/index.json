@@ -1,0 +1,437 @@
+{
+  "tests/conftest.py": {
+    "mtime": 1772687764.7607987,
+    "skeleton": []
+  },
+  "tests/__init__.py": {
+    "mtime": 1772687327.748714,
+    "skeleton": []
+  },
+  "tests/test_indexer.py": {
+    "mtime": 1772688422.849052,
+    "skeleton": [
+      {
+        "type": "function",
+        "name": "test_indexer_finds_python_files",
+        "line": 5,
+        "parent": null,
+        "params": "(sample_repo)"
+      },
+      {
+        "type": "function",
+        "name": "test_indexer_ignores_non_python_files",
+        "line": 11,
+        "parent": null,
+        "params": "(sample_repo)"
+      },
+      {
+        "type": "function",
+        "name": "test_indexer_skeleton_for_file",
+        "line": 18,
+        "parent": null,
+        "params": "(sample_repo)"
+      },
+      {
+        "type": "function",
+        "name": "test_indexer_get_symbol",
+        "line": 28,
+        "parent": null,
+        "params": "(sample_repo)"
+      },
+      {
+        "type": "function",
+        "name": "test_indexer_find_references_across_files",
+        "line": 37,
+        "parent": null,
+        "params": "(sample_repo)"
+      },
+      {
+        "type": "function",
+        "name": "test_indexer_get_call_graph",
+        "line": 46,
+        "parent": null,
+        "params": "(sample_repo)"
+      }
+    ]
+  },
+  "tests/test_server.py": {
+    "mtime": 1772688883.5661619,
+    "skeleton": [
+      {
+        "type": "function",
+        "name": "_get_tool_fn",
+        "line": 5,
+        "parent": null,
+        "params": "(mcp, name)"
+      },
+      {
+        "type": "function",
+        "name": "test_get_file_skeleton_returns_classes_and_functions",
+        "line": 23,
+        "parent": null,
+        "params": "(sample_repo)"
+      },
+      {
+        "type": "function",
+        "name": "test_get_file_skeleton_unknown_file",
+        "line": 32,
+        "parent": null,
+        "params": "(sample_repo)"
+      },
+      {
+        "type": "function",
+        "name": "test_get_symbol_returns_function_source",
+        "line": 43,
+        "parent": null,
+        "params": "(sample_repo)"
+      },
+      {
+        "type": "function",
+        "name": "test_get_symbol_not_found",
+        "line": 51,
+        "parent": null,
+        "params": "(sample_repo)"
+      },
+      {
+        "type": "function",
+        "name": "test_find_references_finds_cross_file_usages",
+        "line": 62,
+        "parent": null,
+        "params": "(sample_repo)"
+      },
+      {
+        "type": "function",
+        "name": "test_find_references_no_results",
+        "line": 70,
+        "parent": null,
+        "params": "(sample_repo)"
+      },
+      {
+        "type": "function",
+        "name": "test_get_call_graph_shows_outbound_calls",
+        "line": 81,
+        "parent": null,
+        "params": "(sample_repo)"
+      },
+      {
+        "type": "function",
+        "name": "test_get_call_graph_shows_callers",
+        "line": 89,
+        "parent": null,
+        "params": "(sample_repo)"
+      }
+    ]
+  },
+  "tests/test_queries.py": {
+    "mtime": 1772688029.4082935,
+    "skeleton": [
+      {
+        "type": "function",
+        "name": "test_skeleton_finds_class",
+        "line": 25,
+        "parent": null,
+        "params": "()"
+      },
+      {
+        "type": "function",
+        "name": "test_skeleton_finds_methods",
+        "line": 30,
+        "parent": null,
+        "params": "()"
+      },
+      {
+        "type": "function",
+        "name": "test_skeleton_finds_top_level_function",
+        "line": 37,
+        "parent": null,
+        "params": "()"
+      },
+      {
+        "type": "function",
+        "name": "test_skeleton_includes_line_numbers",
+        "line": 43,
+        "parent": null,
+        "params": "()"
+      },
+      {
+        "type": "function",
+        "name": "test_extract_symbol_finds_function",
+        "line": 49,
+        "parent": null,
+        "params": "()"
+      },
+      {
+        "type": "function",
+        "name": "test_extract_symbol_finds_class",
+        "line": 55,
+        "parent": null,
+        "params": "()"
+      },
+      {
+        "type": "function",
+        "name": "test_extract_symbol_returns_none_for_missing",
+        "line": 61,
+        "parent": null,
+        "params": "()"
+      },
+      {
+        "type": "function",
+        "name": "test_extract_calls_in_function",
+        "line": 66,
+        "parent": null,
+        "params": "()"
+      },
+      {
+        "type": "function",
+        "name": "test_extract_symbol_usages_finds_calls",
+        "line": 72,
+        "parent": null,
+        "params": "()"
+      }
+    ]
+  },
+  "tests/test_cache.py": {
+    "mtime": 1772688587.6988664,
+    "skeleton": [
+      {
+        "type": "function",
+        "name": "test_cache_write_and_read",
+        "line": 5,
+        "parent": null,
+        "params": "(tmp_path)"
+      },
+      {
+        "type": "function",
+        "name": "test_cache_returns_none_for_missing_key",
+        "line": 16,
+        "parent": null,
+        "params": "(tmp_path)"
+      },
+      {
+        "type": "function",
+        "name": "test_cache_is_valid_when_mtime_matches",
+        "line": 22,
+        "parent": null,
+        "params": "(tmp_path)"
+      },
+      {
+        "type": "function",
+        "name": "test_cache_is_invalid_when_mtime_differs",
+        "line": 28,
+        "parent": null,
+        "params": "(tmp_path)"
+      },
+      {
+        "type": "function",
+        "name": "test_cache_creates_directory_if_missing",
+        "line": 34,
+        "parent": null,
+        "params": "(tmp_path)"
+      }
+    ]
+  },
+  "src/codetree/server.py": {
+    "mtime": 1772691180.2738695,
+    "skeleton": [
+      {
+        "type": "function",
+        "name": "create_server",
+        "line": 7,
+        "parent": null,
+        "params": "(root: str)"
+      },
+      {
+        "type": "function",
+        "name": "run",
+        "line": 133,
+        "parent": null,
+        "params": "(root: str)"
+      }
+    ]
+  },
+  "src/codetree/cache.py": {
+    "mtime": 1772688599.162223,
+    "skeleton": [
+      {
+        "type": "class",
+        "name": "Cache",
+        "line": 5,
+        "parent": null,
+        "params": ""
+      },
+      {
+        "type": "method",
+        "name": "__init__",
+        "line": 6,
+        "parent": "Cache",
+        "params": "(self, root: str | Path)"
+      },
+      {
+        "type": "method",
+        "name": "load",
+        "line": 11,
+        "parent": "Cache",
+        "params": "(self)"
+      },
+      {
+        "type": "method",
+        "name": "save",
+        "line": 16,
+        "parent": "Cache",
+        "params": "(self)"
+      },
+      {
+        "type": "method",
+        "name": "get",
+        "line": 21,
+        "parent": "Cache",
+        "params": "(self, rel_path: str)"
+      },
+      {
+        "type": "method",
+        "name": "set",
+        "line": 24,
+        "parent": "Cache",
+        "params": "(self, rel_path: str, data: dict)"
+      },
+      {
+        "type": "method",
+        "name": "is_valid",
+        "line": 27,
+        "parent": "Cache",
+        "params": "(self, rel_path: str, current_mtime: float)"
+      }
+    ]
+  },
+  "src/codetree/__init__.py": {
+    "mtime": 1772687269.9906027,
+    "skeleton": []
+  },
+  "src/codetree/indexer.py": {
+    "mtime": 1772691051.7255743,
+    "skeleton": [
+      {
+        "type": "class",
+        "name": "Indexer",
+        "line": 19,
+        "parent": null,
+        "params": ""
+      },
+      {
+        "type": "method",
+        "name": "__init__",
+        "line": 20,
+        "parent": "Indexer",
+        "params": "(self, root: str | Path)"
+      },
+      {
+        "type": "method",
+        "name": "_should_skip",
+        "line": 36,
+        "parent": "Indexer",
+        "params": "(self, path: Path)"
+      },
+      {
+        "type": "method",
+        "name": "build",
+        "line": 40,
+        "parent": "Indexer",
+        "params": "(self, cached_mtimes: dict[str, float] | None = None)"
+      },
+      {
+        "type": "method",
+        "name": "inject_cached",
+        "line": 65,
+        "parent": "Indexer",
+        "params": "(self, rel_path: str, py_file: Path, source: bytes, skeleton: list[dict], mtime: float)"
+      },
+      {
+        "type": "method",
+        "name": "get_skeleton",
+        "line": 74,
+        "parent": "Indexer",
+        "params": "(self, rel_path: str)"
+      },
+      {
+        "type": "method",
+        "name": "get_symbol",
+        "line": 80,
+        "parent": "Indexer",
+        "params": "(self, rel_path: str, symbol_name: str)"
+      },
+      {
+        "type": "method",
+        "name": "find_references",
+        "line": 86,
+        "parent": "Indexer",
+        "params": "(self, symbol_name: str)"
+      },
+      {
+        "type": "method",
+        "name": "get_call_graph",
+        "line": 99,
+        "parent": "Indexer",
+        "params": "(self, rel_path: str, function_name: str)"
+      }
+    ]
+  },
+  "src/codetree/queries.py": {
+    "mtime": 1772689042.973581,
+    "skeleton": [
+      {
+        "type": "function",
+        "name": "_parse",
+        "line": 8,
+        "parent": null,
+        "params": "(source: bytes)"
+      },
+      {
+        "type": "function",
+        "name": "_query_matches",
+        "line": 12,
+        "parent": null,
+        "params": "(query: Query, node)"
+      },
+      {
+        "type": "function",
+        "name": "extract_skeleton",
+        "line": 32,
+        "parent": null,
+        "params": "(source: bytes)"
+      },
+      {
+        "type": "function",
+        "name": "extract_symbol_source",
+        "line": 97,
+        "parent": null,
+        "params": "(source: bytes, symbol_name: str)"
+      },
+      {
+        "type": "function",
+        "name": "extract_calls_in_function",
+        "line": 116,
+        "parent": null,
+        "params": "(source: bytes, function_name: str)"
+      },
+      {
+        "type": "function",
+        "name": "extract_symbol_usages",
+        "line": 145,
+        "parent": null,
+        "params": "(source: bytes, symbol_name: str)"
+      }
+    ]
+  },
+  "src/codetree/__main__.py": {
+    "mtime": 1772687309.133401,
+    "skeleton": [
+      {
+        "type": "function",
+        "name": "main",
+        "line": 4,
+        "parent": null,
+        "params": "()"
+      }
+    ]
+  }
+}
