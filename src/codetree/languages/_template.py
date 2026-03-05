@@ -122,3 +122,39 @@ class TemplateLangPlugin(LanguagePlugin):
         """
         # tree = _PARSER.parse(source)
         return []
+
+    def extract_imports(self, source: bytes) -> list[dict]:
+        """Return import/use statements in the file.
+
+        Each result dict: {"line": int, "text": str}
+
+        Example (Python):
+            q = Query(_LANGUAGE, "(module (import_statement) @imp)")
+        """
+        # tree = _PARSER.parse(source)
+        return []
+
+    def check_syntax(self, source: bytes) -> bool:
+        """Return True if the source has syntax errors.
+
+        Example:
+            return _PARSER.parse(source).root_node.has_error
+        """
+        # return _PARSER.parse(source).root_node.has_error
+        return False
+
+    def compute_complexity(self, source: bytes, fn_name: str) -> dict | None:
+        """Return cyclomatic complexity breakdown for a function.
+
+        Returns None if function not found.
+        Returns dict with keys:
+          - total: int (cyclomatic complexity)
+          - breakdown: dict[str, int] (readable_type → count)
+
+        TODO:
+          1. Find the function node by name
+          2. Walk all descendant nodes
+          3. Count nodes matching branching types for this language
+          4. Return {"total": 1 + count, "breakdown": {label: count, ...}}
+        """
+        return None
