@@ -193,6 +193,27 @@ def create_server(root: str) -> FastMCP:
             parts.append("")
         return "\n".join(parts).rstrip()
 
+    @mcp.tool()
+    def get_symbols(symbols: list[dict]) -> str:
+        """Get the full source code of multiple symbols in one call.
+
+        Args:
+            symbols: list of {"file_path": "...", "symbol_name": "..."} dicts
+        """
+        if not symbols:
+            return "No symbols requested."
+        parts = []
+        for item in symbols:
+            fp = item.get("file_path", "")
+            name = item.get("symbol_name", "")
+            result = indexer.get_symbol(fp, name)
+            if result is None:
+                parts.append(f"Symbol '{name}' not found in {fp}")
+            else:
+                source, line = result
+                parts.append(f"# {fp}:{line}\n{source}")
+        return "\n\n".join(parts)
+
     return mcp
 
 

@@ -54,3 +54,75 @@ class TestGetSkeletons:
         assert "=== calc.py ===" in result
         assert "=== utils.js ===" in result
         assert "=== server.go ===" in result
+
+
+# ─── get_symbols ─────────────────────────────────────────────────────────────
+
+class TestGetSymbols:
+
+    def test_returns_multiple_symbols(self, sample_repo):
+        fn = _tool(create_server(str(sample_repo)), "get_symbols")
+        result = fn(symbols=[
+            {"file_path": "calculator.py", "symbol_name": "Calculator"},
+            {"file_path": "calculator.py", "symbol_name": "helper"},
+        ])
+        assert "# calculator.py:" in result
+        assert "class Calculator" in result
+        assert "def helper" in result
+
+    def test_single_symbol(self, sample_repo):
+        fn = _tool(create_server(str(sample_repo)), "get_symbols")
+        result = fn(symbols=[
+            {"file_path": "calculator.py", "symbol_name": "helper"},
+        ])
+        assert "# calculator.py:" in result
+        assert "def helper" in result
+
+    def test_empty_list_returns_message(self, sample_repo):
+        fn = _tool(create_server(str(sample_repo)), "get_symbols")
+        result = fn(symbols=[])
+        assert "no symbols" in result.lower()
+
+    def test_missing_symbol_inline_error(self, sample_repo):
+        fn = _tool(create_server(str(sample_repo)), "get_symbols")
+        result = fn(symbols=[
+            {"file_path": "calculator.py", "symbol_name": "helper"},
+            {"file_path": "calculator.py", "symbol_name": "nonexistent"},
+        ])
+        assert "def helper" in result
+        assert "not found" in result.lower()
+
+    def test_missing_file_inline_error(self, sample_repo):
+        fn = _tool(create_server(str(sample_repo)), "get_symbols")
+        result = fn(symbols=[
+            {"file_path": "ghost.py", "symbol_name": "anything"},
+        ])
+        assert "not found" in result.lower()
+
+    def test_mixed_found_and_not_found(self, sample_repo):
+        fn = _tool(create_server(str(sample_repo)), "get_symbols")
+        result = fn(symbols=[
+            {"file_path": "calculator.py", "symbol_name": "helper"},
+            {"file_path": "ghost.py", "symbol_name": "foo"},
+            {"file_path": "calculator.py", "symbol_name": "missing"},
+        ])
+        assert "def helper" in result
+        assert result.lower().count("not found") == 2
+
+    def test_cross_file_symbols(self, sample_repo):
+        fn = _tool(create_server(str(sample_repo)), "get_symbols")
+        result = fn(symbols=[
+            {"file_path": "calculator.py", "symbol_name": "Calculator"},
+            {"file_path": "main.py", "symbol_name": "run"},
+        ])
+        assert "# calculator.py:" in result
+        assert "# main.py:" in result
+
+    def test_multi_language(self, multi_lang_repo):
+        fn = _tool(create_server(str(multi_lang_repo)), "get_symbols")
+        result = fn(symbols=[
+            {"file_path": "calc.py", "symbol_name": "add"},
+            {"file_path": "server.go", "symbol_name": "NewServer"},
+        ])
+        assert "def add" in result
+        assert "func NewServer" in result
