@@ -56,15 +56,26 @@ def create_server(root: str) -> FastMCP:
         if not skeleton:
             return f"File not found or empty: {file_path}"
 
+        entry = indexer._index.get(file_path)
+
         lines = []
+        if entry and entry.has_errors:
+            lines.append("WARNING: File has syntax errors — skeleton may be incomplete\n")
+
         for item in skeleton:
             kind = item["type"]
-            if kind in ("class", "struct", "interface"):
+            if kind in ("class", "struct", "interface", "trait", "enum", "type"):
                 lines.append(f"{kind} {item['name']} → line {item['line']}")
             else:
                 prefix = "  " if item["parent"] else ""
                 parent_info = f" (in {item['parent']})" if item["parent"] else ""
                 lines.append(f"{prefix}def {item['name']}{item['params']}{parent_info} → line {item['line']}")
+            # Show doc on next line if present
+            doc = item.get("doc", "")
+            if doc:
+                indent = "  " if item.get("parent") else ""
+                extra = "  " if kind not in ("class", "struct", "interface", "trait", "enum", "type") else ""
+                lines.append(f"{indent}{extra}\"{doc}\"")
         return "\n".join(lines)
 
     @mcp.tool()
@@ -127,6 +138,60 @@ def create_server(root: str) -> FastMCP:
             lines.append(f"\n  {function_name} is called by: (no callers found)")
 
         return "\n".join(lines)
+
+    @mcp.tool()
+    def get_imports(file_path: str) -> str:
+        """Get import/use statements from a source file.
+
+        Args:
+            file_path: path relative to the repo root (e.g., "src/main.py" or "calculator.py")
+        """
+        entry = indexer._index.get(file_path)
+        if entry is None:
+            return f"File not found: {file_path}"
+        imports = entry.plugin.extract_imports(entry.source)
+        if not imports:
+            return f"No imports found in {file_path}"
+        lines = [f"Imports in {file_path}:"]
+        for imp in imports:
+            lines.append(f"  {imp['line']}: {imp['text']}")
+        return "\n".join(lines)
+
+    @mcp.tool()
+    def get_skeletons(file_paths: list[str]) -> str:
+        """Get skeletons for multiple files in one call.
+
+        Args:
+            file_paths: list of paths relative to the repo root
+        """
+        if not file_paths:
+            return "No files requested."
+        parts = []
+        for fp in file_paths:
+            parts.append(f"=== {fp} ===")
+            skeleton = indexer.get_skeleton(fp)
+            if not skeleton:
+                parts.append(f"File not found or empty: {fp}")
+                parts.append("")
+                continue
+            entry = indexer._index.get(fp)
+            if entry and entry.has_errors:
+                parts.append("WARNING: File has syntax errors — skeleton may be incomplete")
+            for item in skeleton:
+                kind = item["type"]
+                if kind in ("class", "struct", "interface", "trait", "enum", "type"):
+                    parts.append(f"{kind} {item['name']} → line {item['line']}")
+                else:
+                    prefix = "  " if item["parent"] else ""
+                    parent_info = f" (in {item['parent']})" if item["parent"] else ""
+                    parts.append(f"{prefix}def {item['name']}{item['params']}{parent_info} → line {item['line']}")
+                doc = item.get("doc", "")
+                if doc:
+                    indent = "  " if item.get("parent") else ""
+                    extra = "  " if kind not in ("class", "struct", "interface", "trait", "enum", "type") else ""
+                    parts.append(f"{indent}{extra}\"{doc}\"")
+            parts.append("")
+        return "\n".join(parts).rstrip()
 
     return mcp
 
