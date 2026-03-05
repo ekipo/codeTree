@@ -3,6 +3,7 @@ from .languages.base import LanguagePlugin
 from .languages.python import PythonPlugin
 from .languages.javascript import JavaScriptPlugin
 from .languages.typescript import TypeScriptPlugin, TSXPlugin
+from .languages.go import GoPlugin
 
 # All supported file extensions mapped to plugin instances.
 # To add a new language: import its plugin and add its extensions here.
@@ -12,6 +13,7 @@ PLUGINS: dict[str, LanguagePlugin] = {
     ".jsx": JavaScriptPlugin(),
     ".ts":  TypeScriptPlugin(),
     ".tsx": TSXPlugin(),
+    ".go":  GoPlugin(),
 }
 
 
