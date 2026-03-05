@@ -1,6 +1,6 @@
 from tree_sitter import Language, Parser, Query
 import tree_sitter_python as tspython
-from .base import LanguagePlugin, _matches
+from .base import LanguagePlugin, _matches, _clean_doc
 
 _LANGUAGE = Language(tspython.language())
 _PARSER = Parser(_LANGUAGE)
@@ -83,6 +83,29 @@ class PythonPlugin(LanguagePlugin):
                     "params": m["params"].text.decode("utf-8", errors="replace"),
                 })
 
+        # Set default doc field
+        for item in results:
+            item["doc"] = ""
+
+        # Fill doc fields — Python docstrings are first string in function/class body
+        for q_str in [
+            '(class_definition name: (identifier) @name body: (block (expression_statement (string) @doc)))',
+            '(function_definition name: (identifier) @name body: (block (expression_statement (string) @doc)))',
+        ]:
+            for _, m in _matches(Query(_LANGUAGE, q_str), tree.root_node):
+                name = m["name"].text.decode("utf-8", errors="replace")
+                line = m["name"].start_point[0] + 1
+                doc_text = m["doc"].text.decode("utf-8", errors="replace")
+                for q in ('"""', "'''"):
+                    if doc_text.startswith(q) and doc_text.endswith(q):
+                        doc_text = doc_text[3:-3]
+                        break
+                first_line = doc_text.strip().splitlines()[0].strip() if doc_text.strip() else ""
+                for item in results:
+                    if item["name"] == name and item["line"] == line:
+                        item["doc"] = first_line
+                        break
+
         # Deduplicate by (name, line) — queries can overlap on edge cases
         seen = set()
         deduped = []
@@ -153,3 +176,61 @@ class PythonPlugin(LanguagePlugin):
             node = m["name"]
             usages.append({"line": node.start_point[0] + 1, "col": node.start_point[1]})
         return usages
+
+    def extract_imports(self, source: bytes) -> list[dict]:
+        tree = _parse(source)
+        results = []
+        for q_str in [
+            "(module (import_statement) @imp)",
+            "(module (import_from_statement) @imp)",
+            "(module (future_import_statement) @imp)",
+        ]:
+            for _, m in _matches(Query(_LANGUAGE, q_str), tree.root_node):
+                node = m["imp"]
+                results.append({
+                    "line": node.start_point[0] + 1,
+                    "text": node.text.decode("utf-8", errors="replace").strip(),
+                })
+        results.sort(key=lambda x: x["line"])
+        return results
+
+    def compute_complexity(self, source: bytes, fn_name: str) -> dict | None:
+        tree = _parse(source)
+        fn_node = None
+        for q_str in [
+            "(function_definition name: (identifier) @name) @def",
+            "(decorated_definition (function_definition name: (identifier) @name)) @def",
+        ]:
+            for _, m in _matches(Query(_LANGUAGE, q_str), tree.root_node):
+                if m["name"].text.decode("utf-8", errors="replace") == fn_name:
+                    fn_node = m["def"]
+                    break
+            if fn_node is not None:
+                break
+        if fn_node is None:
+            return None
+
+        branch_map = {
+            "if_statement": "if",
+            "elif_clause": "elif",
+            "for_statement": "for",
+            "while_statement": "while",
+            "except_clause": "except",
+            "with_statement": "with",
+            "boolean_operator": "boolean_op",
+        }
+        counts: dict[str, int] = {}
+
+        def walk(node):
+            if node.type in branch_map:
+                label = branch_map[node.type]
+                counts[label] = counts.get(label, 0) + 1
+            for child in node.children:
+                walk(child)
+
+        walk(fn_node)
+        total = 1 + sum(counts.values())
+        return {"total": total, "breakdown": counts}
+
+    def check_syntax(self, source: bytes) -> bool:
+        return _parse(source).root_node.has_error
