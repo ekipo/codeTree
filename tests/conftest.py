@@ -128,4 +128,41 @@ pub fn default_config() -> Config {
     Config::new("localhost".to_string(), 8080)
 }
 """)
+    (tmp_path / "math.c").write_text("""\
+#include <stdio.h>
+
+struct Calculator {
+    int value;
+};
+
+int add(int a, int b) {
+    return a + b;
+}
+""")
+    (tmp_path / "calculator.cpp").write_text("""\
+#include <iostream>
+
+class Calculator {
+public:
+    int add(int a, int b) {
+        return a + b;
+    }
+};
+
+int helper() {
+    Calculator c;
+    return c.add(1, 2);
+}
+""")
+    (tmp_path / "calc.rb").write_text("""\
+class Calculator
+  def add(a, b)
+    a + b
+  end
+end
+
+def helper
+  Calculator.new.add(1, 2)
+end
+""")
     return tmp_path

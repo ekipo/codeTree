@@ -55,6 +55,14 @@ class TestGetSkeletons:
         assert "=== utils.js ===" in result
         assert "=== server.go ===" in result
 
+    def test_c_cpp_ruby_files(self, multi_lang_repo):
+        fn = _tool(create_server(str(multi_lang_repo)), "get_skeletons")
+        result = fn(file_paths=["math.c", "calculator.cpp", "calc.rb"])
+        assert "=== math.c ===" in result
+        assert "=== calculator.cpp ===" in result
+        assert "=== calc.rb ===" in result
+        assert "add" in result
+
 
 # ─── get_symbols ─────────────────────────────────────────────────────────────
 
