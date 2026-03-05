@@ -49,6 +49,7 @@ def extract_skeleton(source: bytes) -> list[dict]:
             "name": name_node.text.decode("utf-8", errors="replace"),
             "line": name_node.start_point[0] + 1,
             "parent": None,
+            "params": "",
         })
 
     # Methods inside classes
@@ -57,29 +58,36 @@ def extract_skeleton(source: bytes) -> list[dict]:
             name: (identifier) @class_name
             body: (block
                 (function_definition
-                    name: (identifier) @method_name) @method_def))
+                    name: (identifier) @method_name
+                    parameters: (parameters) @params) @method_def))
     """)
     for _, match in _query_matches(method_query, tree.root_node):
         method_node = match["method_name"]
         class_node = match["class_name"]
+        params_node = match["params"]
         results.append({
             "type": "method",
             "name": method_node.text.decode("utf-8", errors="replace"),
             "line": method_node.start_point[0] + 1,
             "parent": class_node.text.decode("utf-8", errors="replace"),
+            "params": params_node.text.decode("utf-8", errors="replace"),
         })
 
     # Top-level functions (not inside a class)
     fn_query = Query(PY_LANGUAGE, """
-        (module (function_definition name: (identifier) @name) @def)
+        (module (function_definition
+            name: (identifier) @name
+            parameters: (parameters) @params) @def)
     """)
     for _, match in _query_matches(fn_query, tree.root_node):
         name_node = match["name"]
+        params_node = match["params"]
         results.append({
             "type": "function",
             "name": name_node.text.decode("utf-8", errors="replace"),
             "line": name_node.start_point[0] + 1,
             "parent": None,
+            "params": params_node.text.decode("utf-8", errors="replace"),
         })
 
     results.sort(key=lambda x: x["line"])
