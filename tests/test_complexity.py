@@ -431,3 +431,141 @@ func process(x int) int {
         fn = _tool(create_server(str(tmp_path)), "get_complexity")
         result = fn(file_path="app.js", function_name="check")
         assert "2" in result
+
+
+from codetree.languages.c import CPlugin
+from codetree.languages.cpp import CppPlugin
+from codetree.languages.ruby import RubyPlugin
+
+C = CPlugin()
+CPP = CppPlugin()
+RB = RubyPlugin()
+
+
+# ─── C complexity ────────────────────────────────────────────────────────────
+
+class TestCComplexity:
+
+    def test_simple_function(self):
+        src = b"int simple() { return 1; }\n"
+        result = C.compute_complexity(src, "simple")
+        assert result is not None
+        assert result["total"] == 1
+
+    def test_if_for_while(self):
+        src = b"""\
+void process(int* items, int len) {
+    if (len > 0) {
+        for (int i = 0; i < len; i++) {
+            while (items[i] > 0) {
+                items[i]--;
+            }
+        }
+    }
+}
+"""
+        result = C.compute_complexity(src, "process")
+        assert result["total"] == 4
+
+    def test_switch_case(self):
+        src = b"""\
+int handle(int x) {
+    switch(x) {
+        case 1: return 1;
+        case 2: return 2;
+        default: return 0;
+    }
+}
+"""
+        result = C.compute_complexity(src, "handle")
+        assert result["total"] >= 3
+
+    def test_not_found(self):
+        src = b"int foo() { return 0; }\n"
+        assert C.compute_complexity(src, "bar") is None
+
+
+# ─── C++ complexity ──────────────────────────────────────────────────────────
+
+class TestCppComplexity:
+
+    def test_simple_function(self):
+        src = b"int simple() { return 1; }\n"
+        result = CPP.compute_complexity(src, "simple")
+        assert result is not None
+        assert result["total"] == 1
+
+    def test_if_for(self):
+        src = b"""\
+void process(int x) {
+    if (x > 0) {
+        for (int i = 0; i < x; i++) {
+            // do work
+        }
+    }
+}
+"""
+        result = CPP.compute_complexity(src, "process")
+        assert result["total"] == 3
+
+    def test_not_found(self):
+        src = b"int foo() { return 0; }\n"
+        assert CPP.compute_complexity(src, "bar") is None
+
+
+# ─── Ruby complexity ─────────────────────────────────────────────────────────
+
+class TestRubyComplexity:
+
+    def test_simple_method(self):
+        src = b"def simple\n  42\nend\n"
+        result = RB.compute_complexity(src, "simple")
+        assert result is not None
+        assert result["total"] == 1
+
+    def test_if_each(self):
+        src = b"""\
+def process(items)
+  if items.length > 0
+    items.each do |x|
+      puts x
+    end
+  end
+end
+"""
+        result = RB.compute_complexity(src, "process")
+        assert result["total"] >= 2  # base + if (each is a method call, not a branch node)
+
+    def test_case_when(self):
+        src = b"""\
+def classify(x)
+  case x
+  when 1
+    "one"
+  when 2
+    "two"
+  else
+    "other"
+  end
+end
+"""
+        result = RB.compute_complexity(src, "classify")
+        assert result["total"] >= 3  # base + when clauses
+
+    def test_while_until(self):
+        src = b"""\
+def wait(x)
+  while x > 0
+    x -= 1
+  end
+  until x < -10
+    x -= 1
+  end
+end
+"""
+        result = RB.compute_complexity(src, "wait")
+        assert result["total"] == 3  # base + while + until
+
+    def test_not_found(self):
+        src = b"def foo\n  42\nend\n"
+        assert RB.compute_complexity(src, "bar") is None

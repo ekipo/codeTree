@@ -160,3 +160,39 @@ class CPlugin(LanguagePlugin):
 
     def check_syntax(self, source: bytes) -> bool:
         return _parse(source).root_node.has_error
+
+    def compute_complexity(self, source: bytes, fn_name: str) -> dict | None:
+        tree = _parse(source)
+        fn_node = None
+        q = Query(_LANGUAGE, "(function_definition declarator: (function_declarator declarator: (identifier) @name)) @def")
+        for _, m in _matches(q, tree.root_node):
+            if m["name"].text.decode("utf-8", errors="replace") == fn_name:
+                fn_node = m["def"]
+                break
+        if fn_node is None:
+            return None
+
+        branch_map = {
+            "if_statement": "if",
+            "for_statement": "for",
+            "while_statement": "while",
+            "do_statement": "do_while",
+            "case_statement": "case",
+        }
+        counts: dict[str, int] = {}
+        def walk(node):
+            if node.type in branch_map:
+                label = branch_map[node.type]
+                counts[label] = counts.get(label, 0) + 1
+            elif node.type == "binary_expression":
+                op = None
+                for child in node.children:
+                    if child.type in ("&&", "||"):
+                        op = child.type
+                if op:
+                    counts[op] = counts.get(op, 0) + 1
+            for child in node.children:
+                walk(child)
+        walk(fn_node)
+        total = 1 + sum(counts.values())
+        return {"total": total, "breakdown": counts}

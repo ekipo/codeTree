@@ -312,3 +312,47 @@ class RubyPlugin(LanguagePlugin):
 
     def check_syntax(self, source: bytes) -> bool:
         return _parse(source).root_node.has_error
+
+    def compute_complexity(self, source: bytes, fn_name: str) -> dict | None:
+        tree = _parse(source)
+        fn_node = None
+        for q_str in [
+            "(method name: (identifier) @name) @def",
+            "(singleton_method name: (identifier) @name) @def",
+        ]:
+            for _, m in _matches(Query(_LANGUAGE, q_str), tree.root_node):
+                if m["name"].text.decode("utf-8", errors="replace") == fn_name:
+                    fn_node = m["def"]
+                    break
+            if fn_node:
+                break
+        if fn_node is None:
+            return None
+
+        branch_map = {
+            "if": "if",
+            "unless": "unless",
+            "while": "while",
+            "until": "until",
+            "for": "for",
+            "when": "when",
+            "elsif": "elsif",
+            "if_modifier": "if",
+            "unless_modifier": "unless",
+            "while_modifier": "while",
+            "until_modifier": "until",
+        }
+        counts: dict[str, int] = {}
+        def walk(node):
+            if node.type in branch_map and node.named_child_count > 0:
+                label = branch_map[node.type]
+                counts[label] = counts.get(label, 0) + 1
+            elif node.type == "binary" and node.children:
+                for child in node.children:
+                    if child.type in ("and", "or", "&&", "||"):
+                        counts[child.type] = counts.get(child.type, 0) + 1
+            for child in node.children:
+                walk(child)
+        walk(fn_node)
+        total = 1 + sum(counts.values())
+        return {"total": total, "breakdown": counts}
