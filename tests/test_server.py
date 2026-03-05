@@ -72,3 +72,22 @@ def test_find_references_no_results(sample_repo):
     fn = _get_tool_fn(mcp, "find_references")
     result = fn(symbol_name="ThisSymbolDoesNotExist")
     assert "no references" in result.lower() or result.strip() == ""
+
+
+# ---------------------------------------------------------------------------
+# Task 8: get_call_graph
+# ---------------------------------------------------------------------------
+
+def test_get_call_graph_shows_outbound_calls(sample_repo):
+    mcp = create_server(str(sample_repo))
+    fn = _get_tool_fn(mcp, "get_call_graph")
+    result = fn(file_path="calculator.py", function_name="helper")
+    assert "Calculator" in result
+    assert "add" in result
+
+
+def test_get_call_graph_shows_callers(sample_repo):
+    mcp = create_server(str(sample_repo))
+    fn = _get_tool_fn(mcp, "get_call_graph")
+    result = fn(file_path="calculator.py", function_name="divide")
+    assert "main.py" in result
