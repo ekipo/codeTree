@@ -214,6 +214,27 @@ def create_server(root: str) -> FastMCP:
                 parts.append(f"# {fp}:{line}\n{source}")
         return "\n\n".join(parts)
 
+    @mcp.tool()
+    def get_complexity(file_path: str, function_name: str) -> str:
+        """Get cyclomatic complexity of a function.
+
+        Args:
+            file_path: path relative to the repo root (e.g., "src/main.py" or "calculator.py")
+            function_name: name of the function to analyze
+        """
+        entry = indexer._index.get(file_path)
+        if entry is None:
+            return f"File not found: {file_path}"
+        result = entry.plugin.compute_complexity(entry.source, function_name)
+        if result is None:
+            return f"Function '{function_name}' not found in {file_path}"
+        breakdown = result["breakdown"]
+        line = f"Complexity of {function_name}() in {file_path}: {result['total']}"
+        if breakdown:
+            parts = [f"{k}: {v}" for k, v in sorted(breakdown.items())]
+            line += f"\n  {', '.join(parts)}"
+        return line
+
     return mcp
 
 

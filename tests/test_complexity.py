@@ -354,3 +354,80 @@ class Foo {
     def test_not_found(self):
         src = b"class Foo { void bar() {} }\n"
         assert JV.compute_complexity(src, "missing") is None
+
+
+from codetree.server import create_server
+
+
+def _tool(mcp, name):
+    return mcp.local_provider._components[f"tool:{name}@"].fn
+
+
+class TestGetComplexityTool:
+
+    def test_python_complexity_output(self, tmp_path):
+        (tmp_path / "calc.py").write_text("""\
+def calculate(x, items):
+    if x > 0:
+        for i in items:
+            if i > 0:
+                return i
+    return 0
+""")
+        fn = _tool(create_server(str(tmp_path)), "get_complexity")
+        result = fn(file_path="calc.py", function_name="calculate")
+        assert "Complexity" in result
+        assert "calculate" in result
+        assert "4" in result
+
+    def test_simple_function_shows_1(self, tmp_path):
+        (tmp_path / "simple.py").write_text("def simple(): return 1\n")
+        fn = _tool(create_server(str(tmp_path)), "get_complexity")
+        result = fn(file_path="simple.py", function_name="simple")
+        assert "1" in result
+
+    def test_function_not_found(self, tmp_path):
+        (tmp_path / "calc.py").write_text("def foo(): pass\n")
+        fn = _tool(create_server(str(tmp_path)), "get_complexity")
+        result = fn(file_path="calc.py", function_name="nonexistent")
+        assert "not found" in result.lower()
+
+    def test_file_not_found(self, tmp_path):
+        (tmp_path / "x.py").write_text("x = 1\n")
+        fn = _tool(create_server(str(tmp_path)), "get_complexity")
+        result = fn(file_path="ghost.py", function_name="foo")
+        assert "not found" in result.lower()
+
+    def test_breakdown_in_output(self, tmp_path):
+        (tmp_path / "calc.py").write_text("""\
+def process(items):
+    for x in items:
+        if x > 0:
+            return x
+    return 0
+""")
+        fn = _tool(create_server(str(tmp_path)), "get_complexity")
+        result = fn(file_path="calc.py", function_name="process")
+        assert "for" in result.lower()
+        assert "if" in result.lower()
+
+    def test_go_complexity(self, tmp_path):
+        (tmp_path / "main.go").write_text("""\
+package main
+
+func process(x int) int {
+    if x > 0 {
+        return x
+    }
+    return 0
+}
+""")
+        fn = _tool(create_server(str(tmp_path)), "get_complexity")
+        result = fn(file_path="main.go", function_name="process")
+        assert "2" in result
+
+    def test_js_complexity(self, tmp_path):
+        (tmp_path / "app.js").write_text("function check(x) { if (x) { return x; } return 0; }\n")
+        fn = _tool(create_server(str(tmp_path)), "get_complexity")
+        result = fn(file_path="app.js", function_name="check")
+        assert "2" in result
