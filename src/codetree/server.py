@@ -58,8 +58,9 @@ def create_server(root: str) -> FastMCP:
 
         lines = []
         for item in skeleton:
-            if item["type"] == "class":
-                lines.append(f"class {item['name']} → line {item['line']}")
+            kind = item["type"]
+            if kind in ("class", "struct", "interface"):
+                lines.append(f"{kind} {item['name']} → line {item['line']}")
             else:
                 prefix = "  " if item["parent"] else ""
                 parent_info = f" (in {item['parent']})" if item["parent"] else ""
