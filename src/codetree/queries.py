@@ -30,7 +30,11 @@ def _query_matches(query: Query, node) -> list[tuple[int, dict]]:
 
 
 def extract_skeleton(source: bytes) -> list[dict]:
-    """Return all classes and functions with name, type, line, parent_class."""
+    """Return top-level classes, their methods, and top-level functions with name, type, line, parent_class.
+
+    Nested functions and nested classes are intentionally excluded; only the
+    module-level constructs and one level of class body are captured.
+    """
     tree = _parse(source)
     results = []
 
@@ -42,7 +46,7 @@ def extract_skeleton(source: bytes) -> list[dict]:
         name_node = match["name"]
         results.append({
             "type": "class",
-            "name": name_node.text.decode(),
+            "name": name_node.text.decode("utf-8", errors="replace"),
             "line": name_node.start_point[0] + 1,
             "parent": None,
         })
@@ -60,9 +64,9 @@ def extract_skeleton(source: bytes) -> list[dict]:
         class_node = match["class_name"]
         results.append({
             "type": "method",
-            "name": method_node.text.decode(),
+            "name": method_node.text.decode("utf-8", errors="replace"),
             "line": method_node.start_point[0] + 1,
-            "parent": class_node.text.decode(),
+            "parent": class_node.text.decode("utf-8", errors="replace"),
         })
 
     # Top-level functions (not inside a class)
@@ -73,7 +77,7 @@ def extract_skeleton(source: bytes) -> list[dict]:
         name_node = match["name"]
         results.append({
             "type": "function",
-            "name": name_node.text.decode(),
+            "name": name_node.text.decode("utf-8", errors="replace"),
             "line": name_node.start_point[0] + 1,
             "parent": None,
         })
@@ -92,10 +96,10 @@ def extract_symbol_source(source: bytes, symbol_name: str) -> tuple[str, int] | 
         """)
         for _, match in _query_matches(query, tree.root_node):
             name_node = match["name"]
-            if name_node.text.decode() == symbol_name:
+            if name_node.text.decode("utf-8", errors="replace") == symbol_name:
                 def_node = match["def"]
                 start_line = def_node.start_point[0] + 1
-                text = source[def_node.start_byte:def_node.end_byte].decode()
+                text = source[def_node.start_byte:def_node.end_byte].decode("utf-8", errors="replace")
                 return text, start_line
 
     return None
@@ -110,7 +114,7 @@ def extract_calls_in_function(source: bytes, function_name: str) -> list[str]:
     """)
     fn_node = None
     for _, match in _query_matches(fn_query, tree.root_node):
-        if match["name"].text.decode() == function_name:
+        if match["name"].text.decode("utf-8", errors="replace") == function_name:
             fn_node = match["def"]
             break
 
@@ -125,7 +129,7 @@ def extract_calls_in_function(source: bytes, function_name: str) -> list[str]:
     """)
     calls = set()
     for _, match in _query_matches(call_query, fn_node):
-        calls.add(match["called"].text.decode())
+        calls.add(match["called"].text.decode("utf-8", errors="replace"))
 
     return sorted(calls)
 
@@ -133,15 +137,14 @@ def extract_calls_in_function(source: bytes, function_name: str) -> list[str]:
 def extract_symbol_usages(source: bytes, symbol_name: str) -> list[dict]:
     """Return all lines where symbol_name appears as an identifier."""
     tree = _parse(source)
-    query = Query(PY_LANGUAGE, """
-        (identifier) @name
-    """)
+    # Use the #eq? predicate to let the tree-sitter query engine filter by name,
+    # avoiding a Python-level loop over every identifier in the file.
+    query = Query(PY_LANGUAGE, f'((identifier) @name (#eq? @name "{symbol_name}"))')
     usages = []
     for _, match in _query_matches(query, tree.root_node):
         node = match["name"]
-        if node.text.decode() == symbol_name:
-            usages.append({
-                "line": node.start_point[0] + 1,
-                "col": node.start_point[1],
-            })
+        usages.append({
+            "line": node.start_point[0] + 1,
+            "col": node.start_point[1],
+        })
     return usages
