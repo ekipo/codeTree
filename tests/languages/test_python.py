@@ -80,3 +80,76 @@ def test_extract_symbol_usages():
     usages = PLUGIN.extract_symbol_usages(SAMPLE, "add")
     assert len(usages) >= 1
     assert any(u["line"] > 1 for u in usages)
+
+
+# --- Decorated function/class support ---
+
+DECORATED_SAMPLE = b"""\
+import flask
+
+app = flask.Flask(__name__)
+
+@app.route('/users')
+def get_users():
+    return []
+
+@app.route('/users/<int:id>')
+def get_user(id):
+    return {}
+
+class UserService:
+    @property
+    def name(self):
+        return 'UserService'
+
+    @staticmethod
+    def create(data):
+        pass
+
+@dataclass
+class Config:
+    host: str = 'localhost'
+"""
+
+
+def test_skeleton_decorated_functions():
+    result = PLUGIN.extract_skeleton(DECORATED_SAMPLE)
+    names = [item["name"] for item in result]
+    assert "get_users" in names
+    assert "get_user" in names
+
+
+def test_skeleton_decorated_methods():
+    result = PLUGIN.extract_skeleton(DECORATED_SAMPLE)
+    names = [item["name"] for item in result]
+    assert "name" in names
+    assert "create" in names
+
+
+def test_skeleton_decorated_class():
+    result = PLUGIN.extract_skeleton(DECORATED_SAMPLE)
+    assert any(item["type"] == "class" and item["name"] == "Config" for item in result)
+
+
+def test_skeleton_no_duplicates():
+    result = PLUGIN.extract_skeleton(DECORATED_SAMPLE)
+    keys = [(item["name"], item["line"]) for item in result]
+    assert len(keys) == len(set(keys))
+
+
+def test_extract_symbol_decorated_function():
+    result = PLUGIN.extract_symbol_source(DECORATED_SAMPLE, "get_users")
+    assert result is not None
+    source, line = result
+    assert "@app.route" in source
+    assert "def get_users" in source
+
+
+def test_extract_calls_decorated_function():
+    source = b"""\
+@app.route('/users')
+def get_users():
+    return list_all()
+"""
+    calls = PLUGIN.extract_calls_in_function(source, "get_users")
+    assert "list_all" in calls

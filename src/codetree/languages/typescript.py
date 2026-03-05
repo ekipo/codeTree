@@ -1,6 +1,6 @@
 from tree_sitter import Language, Parser, Query
 import tree_sitter_typescript as tsts
-from .javascript import JavaScriptPlugin
+from .javascript import JavaScriptPlugin, _arrow_params
 from .base import _matches
 
 _TS_LANGUAGE = Language(tsts.language_typescript())
@@ -83,26 +83,94 @@ class TypeScriptPlugin(JavaScriptPlugin):
                 "params": "",
             })
 
-        results.sort(key=lambda x: x["line"])
-        return results
+        # export default function foo() {}
+        q = Query(lang, """
+            (program (export_statement
+                (function_declaration
+                    name: (identifier) @name
+                    parameters: (formal_parameters) @params) @def))
+        """)
+        for _, m in _matches(q, tree.root_node):
+            results.append({
+                "type": "function",
+                "name": m["name"].text.decode("utf-8", errors="replace"),
+                "line": m["name"].start_point[0] + 1,
+                "parent": None,
+                "params": m["params"].text.decode("utf-8", errors="replace"),
+            })
+
+        # const/let foo = () => {} and const/let foo = function() {}
+        # Both at module level and exported (export const foo = ...)
+        for q_str in [
+            """(program (lexical_declaration
+                (variable_declarator
+                    name: (identifier) @name
+                    value: [(arrow_function) @fn (function_expression) @fn])))""",
+            """(program (export_statement (lexical_declaration
+                (variable_declarator
+                    name: (identifier) @name
+                    value: [(arrow_function) @fn (function_expression) @fn]))))""",
+        ]:
+            for _, m in _matches(Query(lang, q_str), tree.root_node):
+                fn_node = m.get("fn")
+                results.append({
+                    "type": "function",
+                    "name": m["name"].text.decode("utf-8", errors="replace"),
+                    "line": m["name"].start_point[0] + 1,
+                    "parent": None,
+                    "params": _arrow_params(fn_node) if fn_node else "()",
+                })
+
+        # Deduplicate by (name, line)
+        seen = set()
+        deduped = []
+        for item in results:
+            key = (item["name"], item["line"])
+            if key not in seen:
+                seen.add(key)
+                deduped.append(item)
+
+        deduped.sort(key=lambda x: x["line"])
+        return deduped
 
     def extract_symbol_source(self, source: bytes, name: str) -> tuple[str, int] | None:
         lang = self._get_language()
         tree = self._get_parser().parse(source)
 
-        # Functions use identifier; classes use type_identifier in TS grammar
-        for node_type, name_field in [
-            ("function_declaration", "identifier"),
-            ("class_declaration", "type_identifier"),
+        # function_declaration and class_declaration (plain and export default)
+        for q_str in [
+            "(function_declaration name: (identifier) @name) @def",
+            "(class_declaration name: (type_identifier) @name) @def",
+            "(export_statement (function_declaration name: (identifier) @name) @def)",
+            "(export_statement (class_declaration name: (type_identifier) @name) @def)",
         ]:
-            q = Query(lang, f"({node_type} name: ({name_field}) @name) @def")
-            for _, m in _matches(q, tree.root_node):
+            for _, m in _matches(Query(lang, q_str), tree.root_node):
                 if m["name"].text.decode("utf-8", errors="replace") == name:
                     node = m["def"]
                     return (
                         source[node.start_byte:node.end_byte].decode("utf-8", errors="replace"),
                         node.start_point[0] + 1,
                     )
+
+        # const/let foo = () => {} (plain and exported) — return full lexical_declaration
+        for q_str in [
+            """(lexical_declaration
+                (variable_declarator
+                    name: (identifier) @name
+                    value: [(arrow_function) (function_expression)])) @def""",
+            """(export_statement (lexical_declaration
+                (variable_declarator
+                    name: (identifier) @name
+                    value: [(arrow_function) (function_expression)])) @def)""",
+        ]:
+            for _, m in _matches(Query(lang, q_str), tree.root_node):
+                if m["name"].text.decode("utf-8", errors="replace") == name:
+                    node = m["def"]
+                    return (
+                        source[node.start_byte:node.end_byte].decode("utf-8", errors="replace"),
+                        node.start_point[0] + 1,
+                    )
+
         return None
 
     def extract_symbol_usages(self, source: bytes, name: str) -> list[dict]:
