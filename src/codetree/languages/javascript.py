@@ -1,6 +1,6 @@
-from tree_sitter import Language, Parser, Query, QueryCursor
+from tree_sitter import Language, Parser, Query
 import tree_sitter_javascript as tsjs
-from .base import LanguagePlugin
+from .base import LanguagePlugin, _matches
 
 _LANGUAGE = Language(tsjs.language())
 _PARSER = Parser(_LANGUAGE)
@@ -8,18 +8,6 @@ _PARSER = Parser(_LANGUAGE)
 
 def _parse(source: bytes):
     return _PARSER.parse(source)
-
-
-def _matches(query: Query, node) -> list[tuple[int, dict]]:
-    cursor = QueryCursor(query)
-    result = []
-    for pattern_idx, match in cursor.matches(node):
-        unwrapped = {
-            name: nodes[0] if isinstance(nodes, list) and nodes else nodes
-            for name, nodes in match.items()
-        }
-        result.append((pattern_idx, unwrapped))
-    return result
 
 
 class JavaScriptPlugin(LanguagePlugin):

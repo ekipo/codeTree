@@ -39,27 +39,15 @@
 # See docs/language-nodes.md for a cheatsheet of node types per language.
 # ============================================================
 
-from tree_sitter import Language, Parser, Query, QueryCursor
+from tree_sitter import Language, Parser, Query
 
 # TODO: replace with your grammar import
 # import tree_sitter_LANG as tslang
 # _LANGUAGE = Language(tslang.language())
 # _PARSER = Parser(_LANGUAGE)
 
-from .base import LanguagePlugin
-
-
-def _matches(query: Query, node) -> list[tuple[int, dict]]:
-    """Standard helper — copy this into your plugin as-is."""
-    cursor = QueryCursor(query)
-    result = []
-    for pattern_idx, match in cursor.matches(node):
-        unwrapped = {
-            name: nodes[0] if isinstance(nodes, list) and nodes else nodes
-            for name, nodes in match.items()
-        }
-        result.append((pattern_idx, unwrapped))
-    return result
+from .base import LanguagePlugin, _matches
+# Import this from base — do not copy
 
 
 class TemplateLangPlugin(LanguagePlugin):

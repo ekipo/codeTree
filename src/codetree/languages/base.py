@@ -1,5 +1,24 @@
 from abc import ABC, abstractmethod
 
+from tree_sitter import Query, QueryCursor
+
+
+def _matches(query: Query, node) -> list[tuple[int, dict]]:
+    """Run a query and return matches with captures unwrapped to single nodes.
+
+    In tree-sitter 0.25.x, each capture value is a list of nodes.
+    This helper unwraps to a single node (first element) for convenience.
+    """
+    cursor = QueryCursor(query)
+    result = []
+    for pattern_idx, match in cursor.matches(node):
+        unwrapped = {
+            name: nodes[0] if isinstance(nodes, list) and nodes else nodes
+            for name, nodes in match.items()
+        }
+        result.append((pattern_idx, unwrapped))
+    return result
+
 
 class LanguagePlugin(ABC):
     """Abstract base class for all language plugins.

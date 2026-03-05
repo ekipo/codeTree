@@ -1,6 +1,7 @@
 from tree_sitter import Language, Parser, Query
 import tree_sitter_typescript as tsts
-from .javascript import JavaScriptPlugin, _matches
+from .javascript import JavaScriptPlugin
+from .base import _matches
 
 _TS_LANGUAGE = Language(tsts.language_typescript())
 _TS_PARSER = Parser(_TS_LANGUAGE)

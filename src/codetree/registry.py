@@ -18,7 +18,6 @@ PLUGINS: dict[str, LanguagePlugin] = {
     ".go":  GoPlugin(),
     ".rs":  RustPlugin(),
     ".java": JavaPlugin(),
-    ".kt":  JavaPlugin(),
 }
 
 

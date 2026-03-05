@@ -47,7 +47,7 @@ def create_server(root: str) -> FastMCP:
 
     @mcp.tool()
     def get_file_skeleton(file_path: str) -> str:
-        """Get all classes and function signatures in a Python file without their bodies.
+        """Get all classes and function signatures in a source file without their bodies.
 
         Args:
             file_path: path relative to the repo root (e.g., "src/main.py" or "calculator.py")
