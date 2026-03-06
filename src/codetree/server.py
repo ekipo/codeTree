@@ -235,6 +235,33 @@ def create_server(root: str) -> FastMCP:
             line += f"\n  {', '.join(parts)}"
         return line
 
+    @mcp.tool()
+    def find_dead_code(file_path: str | None = None) -> str:
+        """Find symbols that are defined but never referenced elsewhere in the repo.
+
+        Args:
+            file_path: optional — if given, only check this file. Otherwise scans entire repo.
+        """
+        if file_path and file_path not in indexer._index:
+            return f"File not found: {file_path}"
+        dead = indexer.find_dead_code(file_path=file_path)
+        if not dead:
+            scope = file_path if file_path else "the repo"
+            return f"No dead code found in {scope}."
+        by_file: dict[str, list] = {}
+        for item in dead:
+            by_file.setdefault(item["file"], []).append(item)
+        lines = []
+        for fp, items in sorted(by_file.items()):
+            lines.append(f"Dead code in {fp}:")
+            for item in items:
+                parent = f"{item['parent']}." if item.get("parent") else ""
+                lines.append(f"  {item['type']} {parent}{item['name']}() → line {item['line']}")
+        total = len(dead)
+        file_count = len(by_file)
+        lines.append(f"\nSummary: {total} dead symbol{'s' if total != 1 else ''} across {file_count} file{'s' if file_count != 1 else ''}")
+        return "\n".join(lines)
+
     return mcp
 
 

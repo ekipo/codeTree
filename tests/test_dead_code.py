@@ -161,3 +161,45 @@ class Foo:
         dead = indexer.find_dead_code()
         dead_names = [d["name"] for d in dead]
         assert "User" not in dead_names
+
+
+# ─── Dead code MCP tool ───────────────────────────────────────────────────────
+
+class TestFindDeadCodeTool:
+
+    def test_finds_dead_function(self, tmp_path):
+        (tmp_path / "app.py").write_text("def unused(): return 1\n")
+        mcp = create_server(str(tmp_path))
+        fn = _tool(mcp, "find_dead_code")
+        result = fn()
+        assert "unused" in result
+
+    def test_per_file_mode(self, tmp_path):
+        (tmp_path / "a.py").write_text("def unused_a(): pass\n")
+        (tmp_path / "b.py").write_text("def unused_b(): pass\n")
+        mcp = create_server(str(tmp_path))
+        fn = _tool(mcp, "find_dead_code")
+        result = fn(file_path="a.py")
+        assert "unused_a" in result
+        assert "unused_b" not in result
+
+    def test_no_dead_code_message(self, tmp_path):
+        (tmp_path / "app.py").write_text("x = 1\n")
+        mcp = create_server(str(tmp_path))
+        fn = _tool(mcp, "find_dead_code")
+        result = fn()
+        assert "No dead code found" in result
+
+    def test_output_has_summary(self, tmp_path):
+        (tmp_path / "app.py").write_text("def unused(): return 1\n")
+        mcp = create_server(str(tmp_path))
+        fn = _tool(mcp, "find_dead_code")
+        result = fn()
+        assert "Summary:" in result
+        assert "dead symbol" in result
+
+    def test_file_not_found(self, tmp_path):
+        mcp = create_server(str(tmp_path))
+        fn = _tool(mcp, "find_dead_code")
+        result = fn(file_path="nonexistent.py")
+        assert "File not found" in result
