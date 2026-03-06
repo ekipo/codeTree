@@ -450,6 +450,42 @@ def create_server(root: str) -> FastMCP:
         return "\n".join(lines)
 
     @mcp.tool()
+    def get_variables(file_path: str, function_name: str) -> str:
+        """Get local variables declared inside a function.
+
+        Shows parameters, local assignments, and loop variables with types when available.
+
+        Args:
+            file_path: path relative to the repo root
+            function_name: name of the function to inspect
+        """
+        if file_path not in indexer._index:
+            return f"File not found: {file_path}"
+        variables = indexer.get_variables(file_path, function_name)
+        if variables is None:
+            return f"File not found: {file_path}"
+        if not variables:
+            return f"No variables found in {function_name}() in {file_path}."
+        lines = [f"Variables in {function_name}() in {file_path}:"]
+
+        # Group by kind
+        by_kind: dict[str, list] = {}
+        for v in variables:
+            by_kind.setdefault(v["kind"], []).append(v)
+
+        kind_labels = {"parameter": "Parameters", "local": "Local variables", "loop_var": "Loop variables"}
+        for kind in ("parameter", "local", "loop_var"):
+            items = by_kind.get(kind, [])
+            if not items:
+                continue
+            lines.append(f"\n{kind_labels[kind]}:")
+            for v in items:
+                type_info = f": {v['type']}" if v["type"] else ""
+                lines.append(f"  {v['name']}{type_info} → line {v['line']}")
+
+        return "\n".join(lines)
+
+    @mcp.tool()
     def rank_symbols(top_n: int = 20, file_path: str | None = None) -> str:
         """Rank symbols by importance using reference-based PageRank.
 
