@@ -277,6 +277,16 @@ class Indexer:
             entry.source, symbol_name=symbol_name, max_depth=max_depth
         )
 
+    def get_variables(self, rel_path: str, fn_name: str) -> list[dict] | None:
+        """Return local variables in a function.
+
+        Returns None if file not found.
+        """
+        entry = self._index.get(rel_path)
+        if entry is None:
+            return None
+        return entry.plugin.extract_variables(entry.source, fn_name)
+
     def search_symbols(self, query: str | None = None, type: str | None = None,
                        parent: str | None = None, has_doc: bool | None = None,
                        min_complexity: int | None = None,

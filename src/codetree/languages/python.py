@@ -232,6 +232,100 @@ class PythonPlugin(LanguagePlugin):
         total = 1 + sum(counts.values())
         return {"total": total, "breakdown": counts}
 
+    def extract_variables(self, source: bytes, fn_name: str) -> list[dict]:
+        tree = _parse(source)
+
+        # Find the function node (handles decorated functions too)
+        fn_node = None
+        for q_str in [
+            "(decorated_definition definition: (function_definition name: (identifier) @name) @def)",
+            "(function_definition name: (identifier) @name) @def",
+        ]:
+            for _, m in _matches(Query(_LANGUAGE, q_str), tree.root_node):
+                if m["name"].text.decode("utf-8", errors="replace") == fn_name:
+                    fn_node = m["def"]
+                    break
+            if fn_node:
+                break
+        if fn_node is None:
+            return []
+
+        results = []
+        seen = set()
+
+        def _add(name, line, var_type="", kind="local"):
+            if name not in seen and name not in ("self", "cls"):
+                seen.add(name)
+                results.append({"name": name, "line": line, "type": var_type, "kind": kind})
+
+        # Find actual function_definition node (may be inside decorated_definition)
+        actual_fn = fn_node
+        if fn_node.type == "decorated_definition":
+            for child in fn_node.children:
+                if child.type == "function_definition":
+                    actual_fn = child
+                    break
+
+        # Extract parameters
+        params_node = None
+        for child in actual_fn.children:
+            if child.type == "parameters":
+                params_node = child
+                break
+        if params_node:
+            for child in params_node.children:
+                if child.type == "identifier":
+                    name = child.text.decode("utf-8", errors="replace")
+                    _add(name, child.start_point[0] + 1, kind="parameter")
+                elif child.type in ("default_parameter", "typed_parameter", "typed_default_parameter"):
+                    for sub in child.children:
+                        if sub.type == "identifier":
+                            name = sub.text.decode("utf-8", errors="replace")
+                            var_type = ""
+                            for sib in child.children:
+                                if sib.type == "type":
+                                    var_type = sib.text.decode("utf-8", errors="replace")
+                                    break
+                            _add(name, sub.start_point[0] + 1, var_type=var_type, kind="parameter")
+                            break
+                elif child.type in ("list_splat_pattern", "dictionary_splat_pattern"):
+                    for sub in child.children:
+                        if sub.type == "identifier":
+                            _add(sub.text.decode("utf-8", errors="replace"),
+                                 sub.start_point[0] + 1, kind="parameter")
+                            break
+
+        # Walk the function body for local assignments and loop vars
+        def walk(node):
+            if node.type == "assignment":
+                # Only capture simple identifier targets (not self.x)
+                target = node.children[0] if node.children else None
+                if target and target.type == "identifier":
+                    name = target.text.decode("utf-8", errors="replace")
+                    var_type = ""
+                    for child in node.children:
+                        if child.type == "type":
+                            var_type = child.text.decode("utf-8", errors="replace")
+                            break
+                    _add(name, target.start_point[0] + 1, var_type=var_type)
+            elif node.type == "for_statement":
+                # Loop variable: for X in ...
+                for child in node.children:
+                    if child.type == "identifier":
+                        _add(child.text.decode("utf-8", errors="replace"),
+                             child.start_point[0] + 1, kind="loop_var")
+                        break
+            for child in node.children:
+                walk(child)
+
+        # Find the function body (block)
+        for child in actual_fn.children:
+            if child.type == "block":
+                walk(child)
+                break
+
+        return results
+
     def check_syntax(self, source: bytes) -> bool:
         return _parse(source).root_node.has_error
 

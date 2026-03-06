@@ -120,6 +120,19 @@ class LanguagePlugin(ABC):
           - text: str (raw import statement text, stripped of trailing newline)
         """
 
+    def extract_variables(self, source: bytes, fn_name: str) -> list[dict]:
+        """Return local variables declared inside a function.
+
+        Each dict has keys:
+          - name: str (variable name)
+          - line: int (1-based)
+          - type: str (type annotation if present, else "")
+          - kind: str ("local" | "parameter" | "loop_var")
+
+        Default returns empty list. Override per language.
+        """
+        return []
+
     def compute_complexity(self, source: bytes, fn_name: str) -> dict | None:
         """Return cyclomatic complexity breakdown for a function.
 
