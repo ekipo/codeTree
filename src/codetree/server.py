@@ -427,6 +427,31 @@ def create_server(root: str) -> FastMCP:
         lines.append(f"\nFound {len(results)} symbol{'s' if len(results) != 1 else ''}")
         return "\n".join(lines)
 
+    @mcp.tool()
+    def rank_symbols(top_n: int = 20, file_path: str | None = None) -> str:
+        """Rank symbols by importance using reference-based PageRank.
+
+        Returns the most central/important symbols in the codebase — useful for
+        understanding unfamiliar code. Heavily-referenced symbols rank highest.
+
+        Args:
+            top_n: number of top symbols to return (default 20)
+            file_path: optional — if given, only rank symbols in this file
+        """
+        if file_path and file_path not in indexer._index:
+            return f"File not found: {file_path}"
+        ranked = indexer.rank_symbols(top_n=top_n, file_path=file_path)
+        if not ranked:
+            scope = file_path if file_path else "the repo"
+            return f"No symbols found in {scope}."
+        lines = ["Symbol importance ranking:"]
+        for i, r in enumerate(ranked, 1):
+            score_pct = f"{r['score'] * 100:.1f}%"
+            lines.append(f"  {i}. {r['file']}: {r['type']} {r['name']} → line {r['line']}  (importance: {score_pct})")
+        scope = f" in {file_path}" if file_path else ""
+        lines.append(f"\nTop {len(ranked)} symbols{scope} by reference-based importance")
+        return "\n".join(lines)
+
     return mcp
 
 
