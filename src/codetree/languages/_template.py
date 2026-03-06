@@ -159,6 +159,33 @@ class TemplateLangPlugin(LanguagePlugin):
         """
         return None
 
+    def extract_variables(self, source: bytes, fn_name: str) -> list[dict]:
+        """Return local variables declared inside a function.
+
+        Each dict has keys:
+          - name: str (variable name)
+          - line: int (1-based)
+          - type: str (type annotation if present, else "")
+          - kind: str ("local" | "parameter" | "loop_var")
+
+        TODO:
+          Step 1 — Find the function node by name
+          Step 2 — Extract parameters from the function's parameter list
+          Step 3 — Walk the function body for assignments and loop variables
+          Step 4 — Deduplicate by name (first occurrence wins)
+          Step 5 — Skip self/cls (Python) and _ (Go/Rust)
+
+        Key node types per language:
+          Python: assignment, for_statement
+          JS/TS: lexical_declaration, variable_declaration, for_in_statement
+          Go: short_var_declaration, range_clause
+          Rust: let_declaration, for_expression
+          Java: local_variable_declaration, enhanced_for_statement
+
+        Returns [] if function not found (default from base.py).
+        """
+        return []
+
     # ── Optional methods (defaults in base.py) ────────────────────────────────
     #
     # normalize_source_for_clones and get_ast_sexp have default implementations
