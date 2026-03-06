@@ -89,6 +89,7 @@ class Indexer:
     def inject_cached(self, rel_path: str, py_file: Path, source: bytes,
                       skeleton: list[dict], mtime: float):
         """Inject a pre-computed entry (from cache) without re-parsing."""
+        self._call_graph_built = False   # invalidate so graph is rebuilt with new entry
         plugin = get_plugin(py_file)
         if plugin is None:
             return
