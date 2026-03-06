@@ -328,6 +328,7 @@ class Indexer:
                     "line": item["line"],
                     "parent": item.get("parent"),
                     "doc": item.get("doc", ""),
+                    "params": item.get("params", ""),
                 })
         return results
 
@@ -471,11 +472,17 @@ class Indexer:
                 confidence = 0
                 reasons = []
 
-                # Strategy 1: Direct reference — test source references the symbol
-                usages = entry.plugin.extract_symbol_usages(entry.source, symbol_name)
-                if usages:
-                    confidence += 3
-                    reasons.append("references symbol")
+                # Strategy 1: Direct reference — this test function references the symbol
+                # Scope to the function's own source to avoid false positives from file-level imports
+                fn_result = entry.plugin.extract_symbol_source(entry.source, item["name"])
+                if fn_result is not None:
+                    fn_src, _ = fn_result
+                    fn_usages = entry.plugin.extract_symbol_usages(
+                        fn_src.encode("utf-8", errors="replace"), symbol_name
+                    )
+                    if fn_usages:
+                        confidence += 3
+                        reasons.append("references symbol")
 
                 # Strategy 2: Name convention — test name contains symbol name
                 if name_lower in item["name"].lower():

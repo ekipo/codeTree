@@ -462,8 +462,6 @@ def create_server(root: str) -> FastMCP:
         if file_path not in indexer._index:
             return f"File not found: {file_path}"
         variables = indexer.get_variables(file_path, function_name)
-        if variables is None:
-            return f"File not found: {file_path}"
         if not variables:
             return f"No variables found in {function_name}() in {file_path}."
         lines = [f"Variables in {function_name}() in {file_path}:"]
