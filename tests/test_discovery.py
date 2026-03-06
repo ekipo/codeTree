@@ -100,3 +100,34 @@ def test_other_stuff():
         indexer.build()
         tests = indexer.find_tests("nonexistent.py", "foo")
         assert tests == []
+
+
+# ─── MCP tool: find_tests ───────────────────────────────────────────────────
+
+class TestFindTestsTool:
+
+    def test_finds_tests(self, tmp_path):
+        (tmp_path / "calc.py").write_text("def add(a, b): return a + b\n")
+        (tmp_path / "test_calc.py").write_text("def test_add(): pass\n")
+        fn = _tool(create_server(str(tmp_path)), "find_tests")
+        result = fn(file_path="calc.py", symbol_name="add")
+        assert "test_add" in result
+
+    def test_shows_confidence(self, tmp_path):
+        (tmp_path / "calc.py").write_text("def add(a, b): return a + b\n")
+        (tmp_path / "test_calc.py").write_text("from calc import add\ndef test_add(): add(1,2)\n")
+        fn = _tool(create_server(str(tmp_path)), "find_tests")
+        result = fn(file_path="calc.py", symbol_name="add")
+        assert "reference" in result.lower() or "name" in result.lower()
+
+    def test_no_tests_message(self, tmp_path):
+        (tmp_path / "calc.py").write_text("def add(a, b): return a + b\n")
+        fn = _tool(create_server(str(tmp_path)), "find_tests")
+        result = fn(file_path="calc.py", symbol_name="add")
+        assert "no test" in result.lower()
+
+    def test_file_not_found(self, tmp_path):
+        (tmp_path / "x.py").write_text("x = 1\n")
+        fn = _tool(create_server(str(tmp_path)), "find_tests")
+        result = fn(file_path="ghost.py", symbol_name="foo")
+        assert "not found" in result.lower()

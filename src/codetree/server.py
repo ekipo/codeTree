@@ -428,6 +428,28 @@ def create_server(root: str) -> FastMCP:
         return "\n".join(lines)
 
     @mcp.tool()
+    def find_tests(file_path: str, symbol_name: str) -> str:
+        """Find test functions associated with a symbol.
+
+        Searches by naming convention (test_<name>), direct reference,
+        and file convention (test_<module>). Results ranked by confidence.
+
+        Args:
+            file_path: path relative to the repo root
+            symbol_name: name of the function/class to find tests for
+        """
+        if file_path not in indexer._index:
+            return f"File not found: {file_path}"
+        tests = indexer.find_tests(file_path, symbol_name)
+        if not tests:
+            return f"No tests found for '{symbol_name}' in {file_path}."
+        lines = [f"Tests for {symbol_name}() in {file_path}:"]
+        for t in tests:
+            lines.append(f"  {t['file']}: {t['name']}() → line {t['line']}  ({t['reason']})")
+        lines.append(f"\nFound {len(tests)} test{'s' if len(tests) != 1 else ''}")
+        return "\n".join(lines)
+
+    @mcp.tool()
     def rank_symbols(top_n: int = 20, file_path: str | None = None) -> str:
         """Rank symbols by importance using reference-based PageRank.
 
