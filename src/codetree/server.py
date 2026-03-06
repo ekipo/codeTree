@@ -45,23 +45,22 @@ def create_server(root: str) -> FastMCP:
         })
     cache.save()
 
-    @mcp.tool()
-    def get_file_skeleton(file_path: str) -> str:
-        """Get all classes and function signatures in a source file without their bodies.
+    # ── Skeleton formatting helpers ──────────────────────────────────────────
+    _TYPE_ABBREV = {
+        "class": "cls", "struct": "str", "interface": "ifc",
+        "trait": "trt", "enum": "enm", "type": "typ",
+        "function": "fn", "method": "mth",
+    }
 
-        Args:
-            file_path: path relative to the repo root (e.g., "src/main.py" or "calculator.py")
-        """
-        skeleton = indexer.get_skeleton(file_path)
-        if not skeleton:
-            return f"File not found or empty: {file_path}"
+    def _format_skeleton(skeleton, fmt="full", has_errors=False):
+        if fmt == "compact":
+            return _format_skeleton_compact(skeleton)
+        return _format_skeleton_full(skeleton, has_errors)
 
-        entry = indexer._index.get(file_path)
-
+    def _format_skeleton_full(skeleton, has_errors=False):
         lines = []
-        if entry and entry.has_errors:
+        if has_errors:
             lines.append("WARNING: File has syntax errors — skeleton may be incomplete\n")
-
         for item in skeleton:
             kind = item["type"]
             if kind in ("class", "struct", "interface", "trait", "enum", "type"):
@@ -70,13 +69,50 @@ def create_server(root: str) -> FastMCP:
                 prefix = "  " if item["parent"] else ""
                 parent_info = f" (in {item['parent']})" if item["parent"] else ""
                 lines.append(f"{prefix}def {item['name']}{item['params']}{parent_info} → line {item['line']}")
-            # Show doc on next line if present
             doc = item.get("doc", "")
             if doc:
                 indent = "  " if item.get("parent") else ""
                 extra = "  " if kind not in ("class", "struct", "interface", "trait", "enum", "type") else ""
                 lines.append(f"{indent}{extra}\"{doc}\"")
         return "\n".join(lines)
+
+    def _format_skeleton_compact(skeleton):
+        lines = []
+        for item in skeleton:
+            kind = item["type"]
+            abbrev = _TYPE_ABBREV.get(kind, kind[:3])
+            name = item["name"]
+            line = item["line"]
+            doc = item.get("doc", "")
+            doc_suffix = f" # {doc}" if doc else ""
+
+            if kind in ("class", "struct", "interface", "trait", "enum", "type"):
+                lines.append(f"{abbrev} {name}:{line}{doc_suffix}")
+            elif item.get("parent"):
+                # Method: dot prefix, strip param spaces
+                params = item["params"].replace(", ", ",")
+                lines.append(f".{name}{params}:{line}{doc_suffix}")
+            else:
+                # Top-level function
+                params = item["params"].replace(", ", ",")
+                lines.append(f"{abbrev} {name}{params}:{line}{doc_suffix}")
+        return "\n".join(lines)
+
+    @mcp.tool()
+    def get_file_skeleton(file_path: str, format: str = "full") -> str:
+        """Get all classes and function signatures in a source file without their bodies.
+
+        Args:
+            file_path: path relative to the repo root (e.g., "src/main.py" or "calculator.py")
+            format: "full" (default, verbose) or "compact" (abbreviated, fewer tokens)
+        """
+        skeleton = indexer.get_skeleton(file_path)
+        if not skeleton:
+            return f"File not found or empty: {file_path}"
+
+        entry = indexer._index.get(file_path)
+        has_errors = entry.has_errors if entry else False
+        return _format_skeleton(skeleton, fmt=format, has_errors=has_errors)
 
     @mcp.tool()
     def get_symbol(file_path: str, symbol_name: str) -> str:
@@ -158,11 +194,12 @@ def create_server(root: str) -> FastMCP:
         return "\n".join(lines)
 
     @mcp.tool()
-    def get_skeletons(file_paths: list[str]) -> str:
+    def get_skeletons(file_paths: list[str], format: str = "full") -> str:
         """Get skeletons for multiple files in one call.
 
         Args:
             file_paths: list of paths relative to the repo root
+            format: "full" (default) or "compact" (abbreviated)
         """
         if not file_paths:
             return "No files requested."
@@ -175,21 +212,8 @@ def create_server(root: str) -> FastMCP:
                 parts.append("")
                 continue
             entry = indexer._index.get(fp)
-            if entry and entry.has_errors:
-                parts.append("WARNING: File has syntax errors — skeleton may be incomplete")
-            for item in skeleton:
-                kind = item["type"]
-                if kind in ("class", "struct", "interface", "trait", "enum", "type"):
-                    parts.append(f"{kind} {item['name']} → line {item['line']}")
-                else:
-                    prefix = "  " if item["parent"] else ""
-                    parent_info = f" (in {item['parent']})" if item["parent"] else ""
-                    parts.append(f"{prefix}def {item['name']}{item['params']}{parent_info} → line {item['line']}")
-                doc = item.get("doc", "")
-                if doc:
-                    indent = "  " if item.get("parent") else ""
-                    extra = "  " if kind not in ("class", "struct", "interface", "trait", "enum", "type") else ""
-                    parts.append(f"{indent}{extra}\"{doc}\"")
+            has_errors = entry.has_errors if entry else False
+            parts.append(_format_skeleton(skeleton, fmt=format, has_errors=has_errors))
             parts.append("")
         return "\n".join(parts).rstrip()
 
@@ -352,7 +376,8 @@ def create_server(root: str) -> FastMCP:
     def search_symbols(query: str | None = None, type: str | None = None,
                        parent: str | None = None, has_doc: bool | None = None,
                        min_complexity: int | None = None,
-                       language: str | None = None) -> str:
+                       language: str | None = None,
+                       format: str = "full") -> str:
         """Search for symbols across the repo with flexible filters.
 
         All parameters optional — combine for powerful filtering.
@@ -364,6 +389,7 @@ def create_server(root: str) -> FastMCP:
             has_doc: True = only symbols with doc, False = only without
             min_complexity: minimum cyclomatic complexity
             language: filter by file extension without dot (e.g., "py", "js", "go")
+            format: "full" (default) or "compact" (abbreviated)
         """
         results = indexer.search_symbols(
             query=query, type=type, parent=parent,
@@ -378,6 +404,19 @@ def create_server(root: str) -> FastMCP:
             if min_complexity: filters.append(f'min_complexity={min_complexity}')
             if language: filters.append(f'language="{language}"')
             return f"No symbols found matching {', '.join(filters) if filters else 'criteria'}."
+
+        if format == "compact":
+            lines = []
+            for r in results:
+                abbrev = _TYPE_ABBREV.get(r["type"], r["type"][:3])
+                doc_suffix = f" # {r['doc']}" if r["doc"] else ""
+                if r["parent"]:
+                    lines.append(f"{r['file']}:.{r['name']}:{r['line']}{doc_suffix}")
+                else:
+                    lines.append(f"{r['file']}:{abbrev} {r['name']}:{r['line']}{doc_suffix}")
+            lines.append(f"\n{len(results)} results")
+            return "\n".join(lines)
+
         lines = ["Search results:"]
         for r in results:
             parent_info = f" (in {r['parent']})" if r["parent"] else ""
