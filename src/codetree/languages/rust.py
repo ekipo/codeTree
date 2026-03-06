@@ -249,6 +249,78 @@ class RustPlugin(LanguagePlugin):
         total = 1 + sum(counts.values())
         return {"total": total, "breakdown": counts}
 
+    def extract_variables(self, source: bytes, fn_name: str) -> list[dict]:
+        tree = _parse(source)
+
+        # Find function node
+        fn_node = None
+        for _, m in _matches(Query(_LANGUAGE, "(function_item name: (identifier) @name) @def"), tree.root_node):
+            if m["name"].text.decode("utf-8", errors="replace") == fn_name:
+                fn_node = m["def"]
+                break
+        if fn_node is None:
+            return []
+
+        results = []
+        seen = set()
+
+        def _add(name, line, var_type="", kind="local"):
+            if name not in seen and name != "_":
+                seen.add(name)
+                results.append({"name": name, "line": line, "type": var_type, "kind": kind})
+
+        # Extract parameters from (parameters) node
+        for child in fn_node.children:
+            if child.type == "parameters":
+                for param in child.children:
+                    if param.type == "parameter":
+                        type_text = ""
+                        id_node = None
+                        for sub in param.children:
+                            if sub.type == "identifier":
+                                id_node = sub
+                            elif sub.type in ("primitive_type", "type_identifier",
+                                              "scoped_type_identifier", "generic_type",
+                                              "reference_type", "array_type", "abstract_type"):
+                                type_text = sub.text.decode("utf-8", errors="replace")
+                        if id_node:
+                            _add(id_node.text.decode("utf-8", errors="replace"),
+                                 id_node.start_point[0] + 1, var_type=type_text, kind="parameter")
+                break
+
+        # Walk the function body
+        def walk(node):
+            if node.type == "let_declaration":
+                # let x: Type = expr  or  let x = expr
+                id_node = None
+                type_text = ""
+                for child in node.children:
+                    if child.type == "identifier":
+                        id_node = child
+                    elif child.type in ("type_identifier", "primitive_type",
+                                        "scoped_type_identifier", "generic_type",
+                                        "reference_type"):
+                        type_text = child.text.decode("utf-8", errors="replace")
+                if id_node:
+                    _add(id_node.text.decode("utf-8", errors="replace"),
+                         id_node.start_point[0] + 1, var_type=type_text)
+            elif node.type == "for_expression":
+                # for item in iter { }  — first identifier child is the loop var
+                for child in node.children:
+                    if child.type == "identifier":
+                        _add(child.text.decode("utf-8", errors="replace"),
+                             child.start_point[0] + 1, kind="loop_var")
+                        break
+            for child in node.children:
+                walk(child)
+
+        for child in fn_node.children:
+            if child.type == "block":
+                walk(child)
+                break
+
+        return results
+
     def check_syntax(self, source: bytes) -> bool:
         return _parse(source).root_node.has_error
 

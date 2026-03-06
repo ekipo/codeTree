@@ -225,6 +225,76 @@ class GoPlugin(LanguagePlugin):
         total = 1 + sum(counts.values())
         return {"total": total, "breakdown": counts}
 
+    def extract_variables(self, source: bytes, fn_name: str) -> list[dict]:
+        tree = _parse(source)
+
+        # Find function node (top-level function or method)
+        fn_node = None
+        for _, m in _matches(Query(_LANGUAGE, "(function_declaration name: (identifier) @name) @def"), tree.root_node):
+            if m["name"].text.decode("utf-8", errors="replace") == fn_name:
+                fn_node = m["def"]
+                break
+        if fn_node is None:
+            for _, m in _matches(Query(_LANGUAGE, "(method_declaration name: (field_identifier) @name) @def"), tree.root_node):
+                if m["name"].text.decode("utf-8", errors="replace") == fn_name:
+                    fn_node = m["def"]
+                    break
+        if fn_node is None:
+            return []
+
+        results = []
+        seen = set()
+
+        def _add(name, line, var_type="", kind="local"):
+            if name not in seen and name != "_":
+                seen.add(name)
+                results.append({"name": name, "line": line, "type": var_type, "kind": kind})
+
+        # Extract parameters from parameter_list
+        for child in fn_node.children:
+            if child.type == "parameter_list":
+                for param in child.children:
+                    if param.type == "parameter_declaration":
+                        id_nodes = [c for c in param.children if c.type == "identifier"]
+                        type_text = ""
+                        for c in param.children:
+                            if c.type not in ("identifier", ","):
+                                type_text = c.text.decode("utf-8", errors="replace")
+                        for id_node in id_nodes:
+                            _add(id_node.text.decode("utf-8", errors="replace"),
+                                 id_node.start_point[0] + 1, var_type=type_text, kind="parameter")
+                break
+
+        # Walk the function body
+        def walk(node):
+            if node.type == "short_var_declaration":
+                # LHS is the first expression_list
+                for child in node.children:
+                    if child.type == "expression_list":
+                        for id_node in child.children:
+                            if id_node.type == "identifier":
+                                _add(id_node.text.decode("utf-8", errors="replace"),
+                                     id_node.start_point[0] + 1)
+                        break
+            elif node.type == "range_clause":
+                # _, item := range data  — LHS is expression_list
+                for child in node.children:
+                    if child.type == "expression_list":
+                        for id_node in child.children:
+                            if id_node.type == "identifier":
+                                _add(id_node.text.decode("utf-8", errors="replace"),
+                                     id_node.start_point[0] + 1, kind="loop_var")
+                        break
+            for child in node.children:
+                walk(child)
+
+        for child in fn_node.children:
+            if child.type == "block":
+                walk(child)
+                break
+
+        return results
+
     def check_syntax(self, source: bytes) -> bool:
         return _parse(source).root_node.has_error
 

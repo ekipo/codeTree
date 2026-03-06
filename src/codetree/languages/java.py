@@ -266,6 +266,88 @@ class JavaPlugin(LanguagePlugin):
         total = 1 + sum(counts.values())
         return {"total": total, "breakdown": counts}
 
+    def extract_variables(self, source: bytes, fn_name: str) -> list[dict]:
+        tree = _parse(source)
+
+        # Find method or constructor node
+        fn_node = None
+        for q_str in [
+            "(method_declaration name: (identifier) @name) @def",
+            "(constructor_declaration name: (identifier) @name) @def",
+        ]:
+            for _, m in _matches(Query(_LANGUAGE, q_str), tree.root_node):
+                if m["name"].text.decode("utf-8", errors="replace") == fn_name:
+                    fn_node = m["def"]
+                    break
+            if fn_node:
+                break
+        if fn_node is None:
+            return []
+
+        results = []
+        seen = set()
+
+        def _add(name, line, var_type="", kind="local"):
+            if name not in seen:
+                seen.add(name)
+                results.append({"name": name, "line": line, "type": var_type, "kind": kind})
+
+        # Extract parameters from formal_parameters
+        for child in fn_node.children:
+            if child.type == "formal_parameters":
+                for param in child.children:
+                    if param.type == "formal_parameter":
+                        type_text = ""
+                        id_node = None
+                        for sub in param.children:
+                            if sub.type == "identifier":
+                                id_node = sub
+                            elif sub.type not in (",", "(", ")", " "):
+                                type_text = sub.text.decode("utf-8", errors="replace")
+                        if id_node:
+                            _add(id_node.text.decode("utf-8", errors="replace"),
+                                 id_node.start_point[0] + 1, var_type=type_text, kind="parameter")
+                break
+
+        # Walk the method body
+        def walk(node):
+            if node.type == "local_variable_declaration":
+                # Extract type from first non-declarator, non-semicolon child
+                type_text = ""
+                for child in node.children:
+                    if child.type not in ("variable_declarator", ";"):
+                        type_text = child.text.decode("utf-8", errors="replace")
+                        break
+                for child in node.children:
+                    if child.type == "variable_declarator":
+                        for sub in child.children:
+                            if sub.type == "identifier":
+                                _add(sub.text.decode("utf-8", errors="replace"),
+                                     sub.start_point[0] + 1, var_type=type_text)
+                                break
+            elif node.type == "enhanced_for_statement":
+                # for (Type item : collection) — find type then identifier
+                type_text = ""
+                id_node = None
+                for child in node.children:
+                    if child.type in ("integral_type", "floating_point_type",
+                                      "type_identifier", "generic_type", "array_type"):
+                        type_text = child.text.decode("utf-8", errors="replace")
+                    elif child.type == "identifier" and type_text and id_node is None:
+                        id_node = child
+                if id_node:
+                    _add(id_node.text.decode("utf-8", errors="replace"),
+                         id_node.start_point[0] + 1, kind="loop_var")
+            for child in node.children:
+                walk(child)
+
+        for child in fn_node.children:
+            if child.type == "block":
+                walk(child)
+                break
+
+        return results
+
     def check_syntax(self, source: bytes) -> bool:
         return _parse(source).root_node.has_error
 

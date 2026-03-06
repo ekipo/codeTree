@@ -148,3 +148,93 @@ class TestTSVariables:
         a = next(v for v in result if v["name"] == "a")
         assert a["type"] == "string"
         assert a["kind"] == "parameter"
+
+
+from codetree.languages.go import GoPlugin
+from codetree.languages.rust import RustPlugin
+from codetree.languages.java import JavaPlugin
+
+GO = GoPlugin()
+RUST = RustPlugin()
+JAVA = JavaPlugin()
+
+
+class TestGoVariables:
+
+    def test_short_var_declaration(self):
+        src = b"func foo() {\n\tx := 1\n\ty := \"hello\"\n\t_ = x + len(y)\n}\n"
+        result = GO.extract_variables(src, "foo")
+        names = [v["name"] for v in result]
+        assert "x" in names
+        assert "y" in names
+
+    def test_parameters(self):
+        src = b"func foo(a int, b string) int {\n\treturn 0\n}\n"
+        result = GO.extract_variables(src, "foo")
+        params = [v for v in result if v["kind"] == "parameter"]
+        assert len(params) == 2
+
+    def test_loop_variable(self):
+        src = b"func foo(data []int) {\n\tfor _, item := range data {\n\t\t_ = item\n\t}\n}\n"
+        result = GO.extract_variables(src, "foo")
+        names = [v["name"] for v in result]
+        assert "item" in names or "_" in names
+
+    def test_function_not_found(self):
+        src = b"func foo() {}\n"
+        result = GO.extract_variables(src, "nonexistent")
+        assert result == []
+
+
+class TestRustVariables:
+
+    def test_let_declaration(self):
+        src = b"fn foo() {\n    let x = 1;\n    let y = \"hello\";\n    let _ = x;\n}\n"
+        result = RUST.extract_variables(src, "foo")
+        names = [v["name"] for v in result]
+        assert "x" in names
+        assert "y" in names
+
+    def test_parameters(self):
+        src = b"fn foo(a: i32, b: String) -> i32 {\n    a\n}\n"
+        result = RUST.extract_variables(src, "foo")
+        params = [v for v in result if v["kind"] == "parameter"]
+        assert len(params) == 2
+
+    def test_loop_variable(self):
+        src = b"fn foo(data: Vec<i32>) {\n    for item in data {\n        let _ = item;\n    }\n}\n"
+        result = RUST.extract_variables(src, "foo")
+        names = [v["name"] for v in result]
+        assert "item" in names
+
+    def test_function_not_found(self):
+        src = b"fn foo() {}\n"
+        result = RUST.extract_variables(src, "nonexistent")
+        assert result == []
+
+
+class TestJavaVariables:
+
+    def test_local_variable(self):
+        src = b"class A {\n    void foo() {\n        int x = 1;\n        String y = \"hi\";\n    }\n}\n"
+        result = JAVA.extract_variables(src, "foo")
+        names = [v["name"] for v in result]
+        assert "x" in names
+        assert "y" in names
+
+    def test_parameters(self):
+        src = b"class A {\n    void foo(int a, String b) {}\n}\n"
+        result = JAVA.extract_variables(src, "foo")
+        params = [v for v in result if v["kind"] == "parameter"]
+        assert len(params) == 2
+
+    def test_enhanced_for(self):
+        src = b"class A {\n    void foo(int[] data) {\n        for (int item : data) {}\n    }\n}\n"
+        result = JAVA.extract_variables(src, "foo")
+        names = [v["name"] for v in result]
+        assert "item" in names
+
+    def test_function_not_found(self):
+        src = b"class A {\n    void foo() {}\n}\n"
+        result = JAVA.extract_variables(src, "nonexistent")
+        assert result == []
