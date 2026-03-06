@@ -411,6 +411,90 @@ class Indexer:
         results.sort(key=lambda x: x["score"], reverse=True)
         return results[:top_n]
 
+    def _is_test_file(self, rel_path: str) -> bool:
+        """Check if a file path looks like a test file."""
+        name = Path(rel_path).name
+        parts = Path(rel_path).parts
+        if any(d in ("test", "tests", "spec", "__tests__") for d in parts):
+            return True
+        return (name.startswith("test_") or
+                "_test." in name or
+                ".test." in name or
+                ".spec." in name or
+                (name[0].isupper() and "Test" in name))
+
+    def find_tests(self, file_path: str, symbol_name: str) -> list[dict]:
+        """Find test functions associated with a symbol.
+
+        Uses three strategies:
+        1. Direct reference: test function references the symbol (highest confidence, +3)
+        2. Name convention: test function name contains symbol name (medium, +2)
+        3. File convention: test file name matches source file (lower, +1)
+
+        Returns:
+            list of {"file", "name", "line", "confidence", "reason"}, sorted by confidence desc.
+        """
+        if file_path not in self._index:
+            return []
+
+        source_stem = Path(file_path).stem  # e.g., "calculator" from "calculator.py"
+        name_lower = symbol_name.lower()
+
+        candidates: dict[tuple[str, str], dict] = {}  # (file, name) → best match
+
+        for rel_path, entry in self._index.items():
+            if not self._is_test_file(rel_path):
+                continue
+
+            # For spec/test files, all top-level functions are test candidates
+            is_spec_file = (rel_path.endswith(".spec.js") or rel_path.endswith(".test.js") or
+                            rel_path.endswith(".spec.ts") or rel_path.endswith(".test.ts"))
+
+            for item in entry.skeleton:
+                is_test_sym = (item["name"].startswith("test_") or
+                               item["name"].startswith("Test") or
+                               item["name"].endswith("Test"))
+                if not is_test_sym and not is_spec_file and item["type"] != "class":
+                    continue
+
+                key = (rel_path, item["name"])
+                confidence = 0
+                reasons = []
+
+                # Strategy 1: Direct reference — test source references the symbol
+                usages = entry.plugin.extract_symbol_usages(entry.source, symbol_name)
+                if usages:
+                    confidence += 3
+                    reasons.append("references symbol")
+
+                # Strategy 2: Name convention — test name contains symbol name
+                if name_lower in item["name"].lower():
+                    confidence += 2
+                    reasons.append("name match")
+
+                # Strategy 3: File convention — test file matches source file
+                test_stem = Path(rel_path).stem
+                if (test_stem == f"test_{source_stem}" or
+                        test_stem == f"{source_stem}_test" or
+                        test_stem.replace(".test", "") == source_stem or
+                        test_stem.replace(".spec", "") == source_stem):
+                    confidence += 1
+                    reasons.append("file match")
+
+                if confidence > 0:
+                    if key not in candidates or candidates[key]["confidence"] < confidence:
+                        candidates[key] = {
+                            "file": rel_path,
+                            "name": item["name"],
+                            "line": item["line"],
+                            "confidence": confidence,
+                            "reason": ", ".join(reasons),
+                        }
+
+        results = list(candidates.values())
+        results.sort(key=lambda x: (-x["confidence"], x["file"], x["line"]))
+        return results
+
     def detect_clones(self, file_path: str | None = None, min_lines: int = 5) -> list[dict]:
         """Find duplicate/near-duplicate functions across the repo.
 
