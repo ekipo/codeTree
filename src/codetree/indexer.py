@@ -321,6 +321,88 @@ class Indexer:
                 })
         return results
 
+    def rank_symbols(self, top_n: int = 20, file_path: str | None = None) -> list[dict]:
+        """Rank symbols by importance using PageRank on the reference graph.
+
+        Args:
+            top_n: number of top symbols to return (default 20)
+            file_path: if given, only rank symbols in this file
+        Returns:
+            list of {"file", "name", "type", "line", "score"}, sorted by score descending.
+        """
+        # Collect all symbols as nodes
+        nodes: list[tuple[str, str, str, int]] = []  # (file, name, type, line)
+        for rel_path, entry in self._index.items():
+            for item in entry.skeleton:
+                nodes.append((rel_path, item["name"], item["type"], item["line"]))
+
+        if not nodes:
+            return []
+
+        # Build symbol → index mapping
+        node_keys = [(f, n) for f, n, _, _ in nodes]
+        key_to_idx = {k: i for i, k in enumerate(node_keys)}
+        n = len(nodes)
+
+        # Build adjacency: for each symbol, find what references it
+        # inbound[target_idx] = list of source_idx
+        inbound: dict[int, list[int]] = {i: [] for i in range(n)}
+        outbound_count: dict[int, int] = {i: 0 for i in range(n)}
+
+        for target_idx, (t_file, t_name, t_type, t_line) in enumerate(nodes):
+            refs = self.find_references(t_name)
+            for ref in refs:
+                # Skip self-references (definition site)
+                if ref["file"] == t_file and ref["line"] == t_line:
+                    continue
+                # Find which symbol contains this reference
+                ref_file = ref["file"]
+                ref_line = ref["line"]
+                entry = self._index.get(ref_file)
+                if not entry:
+                    continue
+                # Find the enclosing symbol by checking skeleton items
+                containing = None
+                for item in reversed(entry.skeleton):
+                    if item["line"] <= ref_line:
+                        containing = (ref_file, item["name"])
+                        break
+                if containing and containing in key_to_idx:
+                    src_idx = key_to_idx[containing]
+                    inbound[target_idx].append(src_idx)
+                    outbound_count[src_idx] = outbound_count.get(src_idx, 0) + 1
+
+        # Run PageRank with dangling-node handling so scores sum to ~1.0
+        d = 0.85
+        rank = [1.0 / n] * n
+        dangling = {i for i in range(n) if outbound_count[i] == 0}
+        for _ in range(25):
+            # Redistribute rank from dangling nodes uniformly
+            dangling_sum = sum(rank[i] for i in dangling)
+            new_rank = [(1.0 - d) / n + d * dangling_sum / n] * n
+            for target_idx in range(n):
+                for src_idx in inbound[target_idx]:
+                    out = outbound_count[src_idx]
+                    if out > 0:
+                        new_rank[target_idx] += d * rank[src_idx] / out
+            rank = new_rank
+
+        # Build results
+        results = []
+        for i, (f, name, typ, line) in enumerate(nodes):
+            if file_path and f != file_path:
+                continue
+            results.append({
+                "file": f,
+                "name": name,
+                "type": typ,
+                "line": line,
+                "score": round(rank[i], 6),
+            })
+
+        results.sort(key=lambda x: x["score"], reverse=True)
+        return results[:top_n]
+
     def detect_clones(self, file_path: str | None = None, min_lines: int = 5) -> list[dict]:
         """Find duplicate/near-duplicate functions across the repo.
 
