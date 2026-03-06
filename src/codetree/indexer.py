@@ -277,6 +277,50 @@ class Indexer:
             entry.source, symbol_name=symbol_name, max_depth=max_depth
         )
 
+    def search_symbols(self, query: str | None = None, type: str | None = None,
+                       parent: str | None = None, has_doc: bool | None = None,
+                       min_complexity: int | None = None,
+                       language: str | None = None) -> list[dict]:
+        """Search symbols across the repo with flexible filters.
+
+        All parameters optional; combine for powerful filtering.
+        Returns list of {"file", "name", "type", "line", "parent", "doc"}.
+        """
+        results = []
+        for rel_path, entry in self._index.items():
+            if language and entry.language != language:
+                continue
+            for item in entry.skeleton:
+                if query and query.lower() not in item["name"].lower():
+                    continue
+                if type and item["type"] != type:
+                    continue
+                if parent:
+                    item_parent = item.get("parent") or ""
+                    if parent.lower() not in item_parent.lower():
+                        continue
+                if has_doc is not None:
+                    doc = item.get("doc", "")
+                    if has_doc and not doc:
+                        continue
+                    if not has_doc and doc:
+                        continue
+                if min_complexity is not None:
+                    if item["type"] not in ("function", "method"):
+                        continue
+                    cx = entry.plugin.compute_complexity(entry.source, item["name"])
+                    if cx is None or cx["total"] < min_complexity:
+                        continue
+                results.append({
+                    "file": rel_path,
+                    "name": item["name"],
+                    "type": item["type"],
+                    "line": item["line"],
+                    "parent": item.get("parent"),
+                    "doc": item.get("doc", ""),
+                })
+        return results
+
     def detect_clones(self, file_path: str | None = None, min_lines: int = 5) -> list[dict]:
         """Find duplicate/near-duplicate functions across the repo.
 

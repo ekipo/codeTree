@@ -348,6 +348,45 @@ def create_server(root: str) -> FastMCP:
         lines.append(f"\nSummary: {total_groups} clone group{'s' if total_groups != 1 else ''}, {total_fns} functions")
         return "\n".join(lines)
 
+    @mcp.tool()
+    def search_symbols(query: str | None = None, type: str | None = None,
+                       parent: str | None = None, has_doc: bool | None = None,
+                       min_complexity: int | None = None,
+                       language: str | None = None) -> str:
+        """Search for symbols across the repo with flexible filters.
+
+        All parameters optional — combine for powerful filtering.
+
+        Args:
+            query: case-insensitive substring match on symbol name
+            type: exact match on type (function, class, method, struct, etc.)
+            parent: case-insensitive substring match on parent class name
+            has_doc: True = only symbols with doc, False = only without
+            min_complexity: minimum cyclomatic complexity
+            language: filter by file extension without dot (e.g., "py", "js", "go")
+        """
+        results = indexer.search_symbols(
+            query=query, type=type, parent=parent,
+            has_doc=has_doc, min_complexity=min_complexity, language=language,
+        )
+        if not results:
+            filters = []
+            if query: filters.append(f'query="{query}"')
+            if type: filters.append(f'type="{type}"')
+            if parent: filters.append(f'parent="{parent}"')
+            if has_doc is not None: filters.append(f'has_doc={has_doc}')
+            if min_complexity: filters.append(f'min_complexity={min_complexity}')
+            if language: filters.append(f'language="{language}"')
+            return f"No symbols found matching {', '.join(filters) if filters else 'criteria'}."
+        lines = ["Search results:"]
+        for r in results:
+            parent_info = f" (in {r['parent']})" if r["parent"] else ""
+            lines.append(f"  {r['file']}: {r['type']} {r['name']}{parent_info} → line {r['line']}")
+            if r["doc"]:
+                lines.append(f"    \"{r['doc']}\"")
+        lines.append(f"\nFound {len(results)} symbol{'s' if len(results) != 1 else ''}")
+        return "\n".join(lines)
+
     return mcp
 
 
