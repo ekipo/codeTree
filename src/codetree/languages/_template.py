@@ -158,3 +158,16 @@ class TemplateLangPlugin(LanguagePlugin):
           4. Return {"total": 1 + count, "breakdown": {label: count, ...}}
         """
         return None
+
+    # ── Optional methods (defaults in base.py) ────────────────────────────────
+    #
+    # normalize_source_for_clones and get_ast_sexp have default implementations
+    # in base.py — no override needed unless your language has special AST needs.
+    # Both rely on _get_parser() / _get_language() being defined; add these if
+    # your plugin doesn't already have them:
+    #
+    #   def _get_parser(self):
+    #       return _PARSER
+    #
+    #   def _get_language(self):
+    #       return _LANGUAGE

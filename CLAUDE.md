@@ -6,7 +6,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 codetree is a Python MCP (Model Context Protocol) server that gives coding agents structured code understanding via tree-sitter. Instead of reading entire files, an agent can ask "what classes are in this file?" or "what does this function call?" and get precise, structured answers.
 
-It exposes **8 tools** over MCP:
+It exposes **13 tools** over MCP:
 
 | Tool | Purpose | Returns |
 |------|---------|---------|
@@ -18,6 +18,11 @@ It exposes **8 tools** over MCP:
 | `get_skeletons(file_paths)` | Skeletons for multiple files in one call | `=== calc.py ===\nclass Foo → line 1` |
 | `get_symbols(symbols)` | Full source of multiple symbols | `# calc.py:1\nclass Foo:` |
 | `get_complexity(file_path, function_name)` | Cyclomatic complexity of a function | `Complexity of foo() in calc.py: 5\n  if: 2, for: 1` |
+| `find_dead_code(file_path?)` | Symbols defined but never referenced | `Dead code in calc.py:\n  function unused() → line 15` |
+| `get_blast_radius(file_path, symbol_name)` | Transitive impact analysis | `Direct callers:\n  main.py: run() → line 4` |
+| `detect_clones(file_path?, min_lines?)` | Duplicate/near-duplicate functions | `Clone group 1 (2 functions, 12 lines each):` |
+| `get_ast(file_path, symbol_name?, max_depth?)` | Raw AST as S-expression | `(function_definition [5:0-7:0] ...)` |
+| `search_symbols(query?, type?, parent?, ...)` | Flexible symbol search | `calc.py: class Calculator → line 1` |
 
 `get_file_skeleton` also warns about syntax errors (`WARNING: File has syntax errors — skeleton may be incomplete`).
 
@@ -44,7 +49,7 @@ All `file_path` arguments are **relative to the repo root** (e.g., `"src/main.py
 # Activate venv (required before all commands)
 source .venv/bin/activate
 
-# Run all tests (766 tests, ~16s)
+# Run all tests (849 tests, ~20s)
 pytest
 
 # Run a single test file
@@ -75,8 +80,8 @@ MCP tool call → server.py → indexer.py → FileEntry.plugin → tree-sitter 
 
 | File | Responsibility |
 |---|---|
-| `server.py` | FastMCP 3.1.0 server — defines the 8 tools, wires cache + indexer at startup. Language-unaware. |
-| `indexer.py` | Discovers files, stores a `FileEntry` per file (with its plugin + `has_errors` flag), routes all queries through the stored plugin. Skips `.venv`, `node_modules`, `__pycache__`, `.git`, etc. |
+| `server.py` | FastMCP 3.1.0 server — defines the 13 tools, wires cache + indexer at startup. Language-unaware. |
+| `indexer.py` | Discovers files, stores a `FileEntry` per file (with its plugin + `has_errors` flag), routes all queries through the stored plugin. Builds a definition index and lazy call graph for dead code, blast radius, and clone detection. Skips `.venv`, `node_modules`, `__pycache__`, `.git`, etc. |
 | `cache.py` | `.codetree/index.json` — stores pre-computed skeletons with mtime-based invalidation. Language-unaware. |
 | `registry.py` | Maps file extensions → plugin instances. The **only** place languages are registered. |
 
@@ -84,7 +89,7 @@ MCP tool call → server.py → indexer.py → FileEntry.plugin → tree-sitter 
 
 | File | Responsibility |
 |---|---|
-| `base.py` | `LanguagePlugin` ABC with 5 abstract methods + `check_syntax()` default + shared `_matches()`, `_clean_doc()`, `_fill_docs_from_siblings()` helpers |
+| `base.py` | `LanguagePlugin` ABC with 5 abstract methods + `check_syntax()`, `compute_complexity()`, `normalize_source_for_clones()`, `get_ast_sexp()` defaults + shared `_matches()`, `_clean_doc()`, `_fill_docs_from_siblings()` helpers |
 | `python.py` | PythonPlugin |
 | `javascript.py` | JavaScriptPlugin (also provides `_arrow_params()` used by TS) |
 | `typescript.py` | TypeScriptPlugin + TSXPlugin |
@@ -104,6 +109,8 @@ Each plugin implements:
 5. **`extract_imports(source: bytes) -> list[dict]`** — import statements with `{line, text}`
 6. **`check_syntax(source: bytes) -> bool`** — True if file has syntax errors (non-abstract, default False)
 7. **`compute_complexity(source: bytes, fn_name: str) -> dict | None`** — cyclomatic complexity `{total, breakdown}` (non-abstract, default None)
+8. **`normalize_source_for_clones(source: bytes) -> str`** — AST-normalized source for clone detection (non-abstract, default in base; requires `_get_parser()`)
+9. **`get_ast_sexp(source: bytes, symbol_name?, max_depth?) -> str | None`** — S-expression AST output (non-abstract, default in base; requires `_get_parser()`)
 
 ### Test structure (`tests/`)
 
@@ -120,6 +127,11 @@ Each plugin implements:
 | `test_imports.py` | Import extraction per-language + `get_imports` MCP tool |
 | `test_docstrings.py` | Doc comment extraction per-language + skeleton doc display |
 | `test_syntax_errors.py` | Syntax error detection per-language + skeleton warning |
+| `test_dead_code.py` | Definition index, `find_dead_code` indexer method + MCP tool |
+| `test_blast_radius.py` | Lazy call graph, `get_blast_radius` indexer method + MCP tool |
+| `test_clones.py` | Clone normalization, `detect_clones` indexer method + MCP tool |
+| `test_ast.py` | `get_ast_sexp` plugin method, `get_ast` indexer + MCP tool |
+| `test_search.py` | `search_symbols` indexer method + MCP tool |
 
 Fixtures in `conftest.py`: `sample_repo` (Python-only), `rich_py_repo` (decorators/dataclasses), `multi_lang_repo` (5 languages).
 
