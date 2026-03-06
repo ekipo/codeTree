@@ -322,7 +322,14 @@ class Indexer:
         return results
 
     def rank_symbols(self, top_n: int = 20, file_path: str | None = None) -> list[dict]:
-        """Rank symbols by importance using PageRank on the reference graph.
+        """Rank symbols by importance using PageRank on the call/reference graph.
+
+        Uses the existing call graph (function-to-function calls) for efficient O(1)
+        computation after the call graph is built. Heavily-referenced symbols rank higher.
+
+        Note: symbols sharing the same name across different files will receive the
+        same edges and may get identical scores — this is a known limitation of
+        name-based resolution without import graph analysis.
 
         Args:
             top_n: number of top symbols to return (default 20)
@@ -330,6 +337,8 @@ class Indexer:
         Returns:
             list of {"file", "name", "type", "line", "score"}, sorted by score descending.
         """
+        self._ensure_call_graph()
+
         # Collect all symbols as nodes
         nodes: list[tuple[str, str, str, int]] = []  # (file, name, type, line)
         for rel_path, entry in self._index.items():
@@ -339,49 +348,48 @@ class Indexer:
         if not nodes:
             return []
 
-        # Build symbol → index mapping
-        node_keys = [(f, n) for f, n, _, _ in nodes]
-        key_to_idx = {k: i for i, k in enumerate(node_keys)}
         n = len(nodes)
+        node_keys = [(f, nm) for f, nm, _, _ in nodes]
+        key_to_idx = {k: i for i, k in enumerate(node_keys)}
 
-        # Build adjacency: for each symbol, find what references it
-        # inbound[target_idx] = list of source_idx
-        inbound: dict[int, list[int]] = {i: [] for i in range(n)}
-        outbound_count: dict[int, int] = {i: 0 for i in range(n)}
+        # Build inbound adjacency from call graph (use sets to deduplicate edges)
+        inbound: dict[int, set[int]] = {i: set() for i in range(n)}
 
-        for target_idx, (t_file, t_name, t_type, t_line) in enumerate(nodes):
-            refs = self.find_references(t_name)
-            for ref in refs:
-                # Skip self-references (definition site)
-                if ref["file"] == t_file and ref["line"] == t_line:
+        for caller_key, callee_keys in self._call_graph.items():
+            parts = caller_key.split("::", 1)
+            if len(parts) != 2:
+                continue
+            src_key = (parts[0], parts[1])
+            if src_key not in key_to_idx:
+                continue
+            src_idx = key_to_idx[src_key]
+            for callee_key in callee_keys:
+                if callee_key.startswith("?::"):
                     continue
-                # Find which symbol contains this reference
-                ref_file = ref["file"]
-                ref_line = ref["line"]
-                entry = self._index.get(ref_file)
-                if not entry:
+                parts2 = callee_key.split("::", 1)
+                if len(parts2) != 2:
                     continue
-                # Find the enclosing symbol by checking skeleton items
-                containing = None
-                for item in reversed(entry.skeleton):
-                    if item["line"] <= ref_line:
-                        containing = (ref_file, item["name"])
-                        break
-                if containing and containing in key_to_idx:
-                    src_idx = key_to_idx[containing]
-                    inbound[target_idx].append(src_idx)
-                    outbound_count[src_idx] = outbound_count.get(src_idx, 0) + 1
+                dst_key = (parts2[0], parts2[1])
+                if dst_key not in key_to_idx:
+                    continue
+                dst_idx = key_to_idx[dst_key]
+                inbound[dst_idx].add(src_idx)
 
-        # Run PageRank with dangling-node handling so scores sum to ~1.0
+        # Convert to lists and compute outbound degrees
+        inbound_list = {i: list(inbound[i]) for i in range(n)}
+        outbound_count = [0] * n
+        for i in range(n):
+            for j in inbound_list[i]:
+                outbound_count[j] += 1
+
+        # Run PageRank with dangling-node handling
         d = 0.85
         rank = [1.0 / n] * n
-        dangling = {i for i in range(n) if outbound_count[i] == 0}
         for _ in range(25):
-            # Redistribute rank from dangling nodes uniformly
-            dangling_sum = sum(rank[i] for i in dangling)
-            new_rank = [(1.0 - d) / n + d * dangling_sum / n] * n
+            dangling = sum(rank[i] for i in range(n) if outbound_count[i] == 0)
+            new_rank = [(1.0 - d) / n + d * dangling / n] * n
             for target_idx in range(n):
-                for src_idx in inbound[target_idx]:
+                for src_idx in inbound_list[target_idx]:
                     out = outbound_count[src_idx]
                     if out > 0:
                         new_rank[target_idx] += d * rank[src_idx] / out

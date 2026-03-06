@@ -75,4 +75,4 @@ class TestSymbolImportance:
         ranked = indexer.rank_symbols(top_n=100)
         total = sum(r["score"] for r in ranked)
         # PageRank scores should sum to ~1.0 (within rounding)
-        assert 0.5 < total < 1.5
+        assert abs(total - 1.0) < 0.1
