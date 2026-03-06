@@ -20,6 +20,9 @@ class Indexer:
         self.root = Path(root)
         self._index: dict[str, FileEntry] = {}
         self._definitions: dict[str, list[tuple[str, int]]] = {}
+        self._call_graph: dict[str, set[str]] = {}
+        self._reverse_graph: dict[str, set[str]] = {}
+        self._call_graph_built: bool = False
 
     @property
     def files(self) -> list[Path]:
@@ -129,3 +132,32 @@ class Indexer:
             for u in e.plugin.extract_symbol_usages(e.source, function_name):
                 callers.append({"file": rp, "line": u["line"]})
         return {"calls": calls, "callers": callers}
+
+    def _ensure_call_graph(self):
+        """Build repo-wide call graph lazily on first use."""
+        if self._call_graph_built:
+            return
+        self._call_graph = {}
+        self._reverse_graph = {}
+        for rel_path, entry in self._index.items():
+            for item in entry.skeleton:
+                if item["type"] in ("function", "method"):
+                    caller_key = f"{rel_path}::{item['name']}"
+                    callees = entry.plugin.extract_calls_in_function(
+                        entry.source, item["name"]
+                    )
+                    callee_keys = set()
+                    for callee_name in callees:
+                        # Resolve callee to its definition location(s)
+                        if callee_name in self._definitions:
+                            for def_file, _ in self._definitions[callee_name]:
+                                callee_keys.add(f"{def_file}::{callee_name}")
+                        else:
+                            # External/unresolved — keep as bare name
+                            callee_keys.add(f"?::{callee_name}")
+                    self._call_graph[caller_key] = callee_keys
+                    for ck in callee_keys:
+                        if ck not in self._reverse_graph:
+                            self._reverse_graph[ck] = set()
+                        self._reverse_graph[ck].add(caller_key)
+        self._call_graph_built = True
