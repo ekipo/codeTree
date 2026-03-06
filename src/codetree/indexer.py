@@ -16,6 +16,22 @@ class FileEntry:
 
 
 class Indexer:
+    _EXCLUDED_NAMES = {
+        "main", "__init__", "__main__", "__new__", "__del__",
+        "__str__", "__repr__", "__eq__", "__ne__", "__lt__",
+        "__le__", "__gt__", "__ge__", "__hash__", "__bool__",
+        "__len__", "__getitem__", "__setitem__", "__delitem__",
+        "__iter__", "__next__", "__contains__", "__enter__",
+        "__exit__", "__call__", "__get__", "__set__", "__delete__",
+        "__add__", "__sub__", "__mul__", "__truediv__", "__floordiv__",
+        "__mod__", "__pow__", "__and__", "__or__", "__xor__",
+        "__lshift__", "__rshift__", "__neg__", "__pos__", "__abs__",
+        "__invert__", "__iadd__", "__isub__", "__imul__",
+        "__getattr__", "__setattr__", "__delattr__",
+        "__class_getitem__", "__init_subclass__",
+        "setup", "teardown", "setUp", "tearDown",
+    }
+
     def __init__(self, root: str | Path):
         self.root = Path(root)
         self._index: dict[str, FileEntry] = {}
@@ -162,3 +178,45 @@ class Indexer:
                             self._reverse_graph[ck] = set()
                         self._reverse_graph[ck].add(caller_key)
         self._call_graph_built = True
+
+    def find_dead_code(self, file_path: str | None = None) -> list[dict]:
+        """Find symbols that are defined but never referenced elsewhere.
+
+        Args:
+            file_path: if given, only report dead symbols in this file.
+        Returns:
+            list of {"file": str, "name": str, "type": str, "line": int, "parent": str | None}
+        """
+        dead = []
+        if file_path:
+            files_to_check = {file_path: self._index[file_path]} if file_path in self._index else {}
+        else:
+            files_to_check = self._index
+
+        for rel_path, entry in files_to_check.items():
+            for item in entry.skeleton:
+                name = item["name"]
+
+                if name in self._EXCLUDED_NAMES:
+                    continue
+                if name.startswith("test_") or name.startswith("Test"):
+                    continue
+                if rel_path.endswith("__init__.py"):
+                    continue
+
+                refs = self.find_references(name)
+                def_line = item["line"]
+                external_refs = [
+                    r for r in refs
+                    if not (r["file"] == rel_path and r["line"] == def_line)
+                ]
+
+                if not external_refs:
+                    dead.append({
+                        "file": rel_path,
+                        "name": name,
+                        "type": item["type"],
+                        "line": def_line,
+                        "parent": item.get("parent"),
+                    })
+        return dead
