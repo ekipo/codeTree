@@ -104,7 +104,7 @@ def create_server(root: str) -> FastMCP:
 
         Args:
             file_path: path relative to the repo root (e.g., "src/main.py" or "calculator.py")
-            format: "full" (default, verbose) or "compact" (abbreviated, fewer tokens)
+            format: "full" (default, verbose, includes syntax warnings) or "compact" (abbreviated, fewer tokens, no syntax warnings)
         """
         skeleton = indexer.get_skeleton(file_path)
         if not skeleton:
@@ -408,11 +408,12 @@ def create_server(root: str) -> FastMCP:
         if format == "compact":
             lines = []
             for r in results:
-                abbrev = _TYPE_ABBREV.get(r["type"], r["type"][:3])
                 doc_suffix = f" # {r['doc']}" if r["doc"] else ""
                 if r["parent"]:
-                    lines.append(f"{r['file']}:.{r['name']}:{r['line']}{doc_suffix}")
+                    params = r.get("params", "").replace(", ", ",")
+                    lines.append(f"{r['file']}:.{r['name']}{params}:{r['line']}{doc_suffix}")
                 else:
+                    abbrev = _TYPE_ABBREV.get(r["type"], r["type"][:3])
                     lines.append(f"{r['file']}:{abbrev} {r['name']}:{r['line']}{doc_suffix}")
             lines.append(f"\n{len(results)} results")
             return "\n".join(lines)
