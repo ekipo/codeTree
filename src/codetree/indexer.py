@@ -12,12 +12,14 @@ class FileEntry:
     mtime: float
     language: str
     plugin: LanguagePlugin
+    has_errors: bool = False
 
 
 class Indexer:
     def __init__(self, root: str | Path):
         self.root = Path(root)
         self._index: dict[str, FileEntry] = {}
+        self._definitions: dict[str, list[tuple[str, int]]] = {}
 
     @property
     def files(self) -> list[Path]:
@@ -27,11 +29,16 @@ class Indexer:
         ".venv", "venv", "env", ".env",
         "__pycache__", ".git", ".hg", ".svn",
         "node_modules", ".tox", ".mypy_cache",
-        ".pytest_cache", "dist", "build", "*.egg-info",
+        ".pytest_cache", "dist", "build",
     }
 
     def _should_skip(self, path: Path) -> bool:
-        return any(part in self.SKIP_DIRS for part in path.parts)
+        for part in path.parts:
+            if part in self.SKIP_DIRS:
+                return True
+            if part.endswith(".egg-info"):
+                return True
+        return False
 
     def build(self, cached_mtimes: dict[str, float] | None = None):
         """Index all supported files under root, skipping non-project dirs.
@@ -41,6 +48,8 @@ class Indexer:
         """
         cached_mtimes = cached_mtimes or {}
         for candidate in self.root.rglob("*"):
+            if candidate.is_symlink():
+                continue
             if not candidate.is_file():
                 continue
             plugin = get_plugin(candidate)
@@ -54,6 +63,7 @@ class Indexer:
                 continue
             source = candidate.read_bytes()
             skeleton = plugin.extract_skeleton(source)
+            has_errors = plugin.check_syntax(source)
             self._index[rel] = FileEntry(
                 path=candidate,
                 source=source,
@@ -61,7 +71,17 @@ class Indexer:
                 mtime=mtime,
                 language=candidate.suffix.lstrip("."),
                 plugin=plugin,
+                has_errors=has_errors,
             )
+
+        # Build definition index from skeleton data
+        self._definitions = {}
+        for rel_path, entry in self._index.items():
+            for item in entry.skeleton:
+                name = item["name"]
+                if name not in self._definitions:
+                    self._definitions[name] = []
+                self._definitions[name].append((rel_path, item["line"]))
 
     def inject_cached(self, rel_path: str, py_file: Path, source: bytes,
                       skeleton: list[dict], mtime: float):
@@ -77,6 +97,12 @@ class Indexer:
             language=py_file.suffix.lstrip("."),
             plugin=plugin,
         )
+        # Update definition index
+        for item in skeleton:
+            name = item["name"]
+            if name not in self._definitions:
+                self._definitions[name] = []
+            self._definitions[name].append((rel_path, item["line"]))
 
     def get_skeleton(self, rel_path: str) -> list[dict]:
         entry = self._index.get(rel_path)
