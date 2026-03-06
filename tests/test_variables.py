@@ -96,3 +96,55 @@ class TestVariablesIndexer:
         indexer.build()
         result = indexer.get_variables("ghost.py", "foo")
         assert result is None
+
+
+from codetree.languages.javascript import JavaScriptPlugin
+from codetree.languages.typescript import TypeScriptPlugin
+
+JS = JavaScriptPlugin()
+TS = TypeScriptPlugin()
+
+
+class TestJSVariables:
+
+    def test_const_let_var(self):
+        src = b"function foo() {\n  const x = 1;\n  let y = 2;\n  var z = 3;\n  return x + y + z;\n}\n"
+        result = JS.extract_variables(src, "foo")
+        names = [v["name"] for v in result]
+        assert "x" in names
+        assert "y" in names
+        assert "z" in names
+
+    def test_parameters(self):
+        src = b"function foo(a, b) { return a + b; }\n"
+        result = JS.extract_variables(src, "foo")
+        params = [v for v in result if v["kind"] == "parameter"]
+        assert len(params) == 2
+
+    def test_loop_variable(self):
+        src = b"function foo(data) {\n  for (const item of data) {}\n}\n"
+        result = JS.extract_variables(src, "foo")
+        item = next(v for v in result if v["name"] == "item")
+        assert item["kind"] == "loop_var"
+
+    def test_deduplicates(self):
+        src = b"function foo() {\n  let x = 1;\n  x = 2;\n}\n"
+        result = JS.extract_variables(src, "foo")
+        x_entries = [v for v in result if v["name"] == "x"]
+        assert len(x_entries) == 1
+
+
+class TestTSVariables:
+
+    def test_type_annotation(self):
+        src = b"function foo(): void {\n  const x: number = 42;\n}\n"
+        result = TS.extract_variables(src, "foo")
+        item = next(v for v in result if v["name"] == "x")
+        assert item["type"] == "number"
+
+    def test_parameters_with_types(self):
+        src = b"function foo(a: string, b: number): void {}\n"
+        result = TS.extract_variables(src, "foo")
+        a = next(v for v in result if v["name"] == "a")
+        assert a["type"] == "string"
+        assert a["kind"] == "parameter"

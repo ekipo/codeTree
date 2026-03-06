@@ -370,5 +370,101 @@ class JavaScriptPlugin(LanguagePlugin):
         total = 1 + sum(counts.values())
         return {"total": total, "breakdown": counts}
 
+    def extract_variables(self, source: bytes, fn_name: str) -> list[dict]:
+        lang = self._get_language()
+        tree = self._get_parser().parse(source)
+
+        # Find the function node by name
+        fn_node = None
+        for q_str in [
+            "(export_statement declaration: (function_declaration name: (identifier) @name) @def)",
+            "(function_declaration name: (identifier) @name) @def",
+            "(export_statement declaration: (generator_function_declaration name: (identifier) @name) @def)",
+            "(generator_function_declaration name: (identifier) @name) @def",
+            "(method_definition name: (property_identifier) @name) @def",
+        ]:
+            for _, m in _matches(Query(lang, q_str), tree.root_node):
+                if m["name"].text.decode("utf-8", errors="replace") == fn_name:
+                    fn_node = m["def"]
+                    break
+            if fn_node:
+                break
+
+        # Also look for arrow/function expression: const foo = () => {}
+        if fn_node is None:
+            q_str = "(variable_declarator name: (identifier) @name value: [(arrow_function) @def (function_expression) @def])"
+            for _, m in _matches(Query(lang, q_str), tree.root_node):
+                if m["name"].text.decode("utf-8", errors="replace") == fn_name:
+                    fn_node = m["def"]
+                    break
+
+        if fn_node is None:
+            return []
+
+        results = []
+        seen = set()
+
+        def _add(name, line, var_type="", kind="local"):
+            if name not in seen:
+                seen.add(name)
+                results.append({"name": name, "line": line, "type": var_type, "kind": kind})
+
+        # Extract parameters from formal_parameters
+        for child in fn_node.children:
+            if child.type == "formal_parameters":
+                for param in child.children:
+                    if param.type == "identifier":
+                        _add(param.text.decode("utf-8", errors="replace"),
+                             param.start_point[0] + 1, kind="parameter")
+                    elif param.type == "assignment_pattern":
+                        # default params: x = default
+                        for sub in param.children:
+                            if sub.type == "identifier":
+                                _add(sub.text.decode("utf-8", errors="replace"),
+                                     sub.start_point[0] + 1, kind="parameter")
+                                break
+                break
+
+        # Walk the function body
+        def walk(node):
+            if node.type in ("lexical_declaration", "variable_declaration"):
+                for child in node.children:
+                    if child.type == "variable_declarator":
+                        for sub in child.children:
+                            if sub.type == "identifier":
+                                name = sub.text.decode("utf-8", errors="replace")
+                                # Look for type annotation (TS only, but harmless here)
+                                var_type = ""
+                                for sib in child.children:
+                                    if sib.type == "type_annotation":
+                                        t = sib.text.decode("utf-8", errors="replace")
+                                        # Strip leading ": " prefix
+                                        if t.startswith(": "):
+                                            t = t[2:]
+                                        elif t.startswith(":"):
+                                            t = t[1:].strip()
+                                        var_type = t
+                                        break
+                                _add(name, sub.start_point[0] + 1, var_type=var_type)
+                                break
+            elif node.type == "for_in_statement":
+                # for (const item of data) or for (const key in obj)
+                # The loop variable identifier is a direct child of for_in_statement
+                for child in node.children:
+                    if child.type == "identifier":
+                        _add(child.text.decode("utf-8", errors="replace"),
+                             child.start_point[0] + 1, kind="loop_var")
+                        break
+            for child in node.children:
+                walk(child)
+
+        # Find the body (statement_block)
+        for child in fn_node.children:
+            if child.type == "statement_block":
+                walk(child)
+                break
+
+        return results
+
     def check_syntax(self, source: bytes) -> bool:
         return self._get_parser().parse(source).root_node.has_error
