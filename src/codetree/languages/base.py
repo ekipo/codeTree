@@ -134,6 +134,76 @@ class LanguagePlugin(ABC):
         """Return True if the source has syntax errors."""
         return False
 
+    def get_ast_sexp(self, source: bytes, symbol_name: str | None = None, max_depth: int = -1) -> str | None:
+        """Return S-expression representation of the AST with line positions.
+
+        Args:
+            source: source code bytes
+            symbol_name: if given, return AST for just this symbol
+            max_depth: limit depth (-1 = unlimited)
+        Returns:
+            S-expression string, or None if symbol_name given but not found.
+        """
+        try:
+            parser = self._get_parser()
+        except AttributeError:
+            return None
+
+        tree = parser.parse(source)
+        root = tree.root_node
+
+        if symbol_name:
+            result = self.extract_symbol_source(source, symbol_name)
+            if result is None:
+                return None
+            _, start_line = result
+            target_line = start_line - 1  # convert to 0-based
+
+            def find_node(node, target_line):
+                if node.start_point[0] == target_line and node.type not in ("module", "program", "translation_unit", "source_file"):
+                    return node
+                for child in node.children:
+                    found = find_node(child, target_line)
+                    if found:
+                        return found
+                return None
+
+            found = find_node(root, target_line)
+            if found is None:
+                return None
+            root = found
+
+        def format_node(node, depth=0, current_depth=0):
+            indent = "  " * depth
+            pos = f"[{node.start_point[0]+1}:{node.start_point[1]}-{node.end_point[0]+1}:{node.end_point[1]}]"
+
+            if max_depth >= 0 and current_depth > max_depth:
+                return None
+
+            if not node.children:
+                text = node.text.decode("utf-8", errors="replace")
+                if node.is_named:
+                    return f"{indent}({node.type} {pos} {repr(text)})"
+                else:
+                    return f"{indent}{repr(text)}"
+
+            if max_depth >= 0 and current_depth == max_depth:
+                return f"{indent}({node.type} {pos} ...)"
+
+            child_strs = []
+            for child in node.children:
+                cs = format_node(child, depth + 1, current_depth + 1)
+                if cs:
+                    child_strs.append(cs)
+
+            if child_strs:
+                children = "\n".join(child_strs)
+                return f"{indent}({node.type} {pos}\n{children})"
+            else:
+                return f"{indent}({node.type} {pos})"
+
+        return format_node(root)
+
     def normalize_source_for_clones(self, source: bytes) -> str:
         """Normalize source for clone detection.
 

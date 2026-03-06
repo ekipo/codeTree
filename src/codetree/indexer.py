@@ -265,6 +265,18 @@ class Indexer:
         calls = _bfs(self._call_graph, target_key)
         return {"callers": callers, "calls": calls}
 
+    def get_ast(self, rel_path: str, symbol_name: str | None = None, max_depth: int = -1) -> str | None:
+        """Return AST S-expression for a file or symbol.
+
+        Returns None if file not found.
+        """
+        entry = self._index.get(rel_path)
+        if entry is None:
+            return None
+        return entry.plugin.get_ast_sexp(
+            entry.source, symbol_name=symbol_name, max_depth=max_depth
+        )
+
     def detect_clones(self, file_path: str | None = None, min_lines: int = 5) -> list[dict]:
         """Find duplicate/near-duplicate functions across the repo.
 

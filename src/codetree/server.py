@@ -304,6 +304,25 @@ def create_server(root: str) -> FastMCP:
         return "\n".join(lines)
 
     @mcp.tool()
+    def get_ast(file_path: str, symbol_name: str | None = None, max_depth: int = -1) -> str:
+        """Get the raw AST (abstract syntax tree) of a file or symbol as an S-expression.
+
+        Args:
+            file_path: path relative to the repo root
+            symbol_name: optional — if given, show AST for just this symbol
+            max_depth: optional — limit tree depth (-1 = unlimited, 0 = root only)
+        """
+        if file_path not in indexer._index:
+            return f"File not found: {file_path}"
+        result = indexer.get_ast(file_path, symbol_name=symbol_name, max_depth=max_depth)
+        if result is None:
+            if symbol_name:
+                return f"Symbol '{symbol_name}' not found in {file_path}"
+            return f"Could not parse AST for {file_path}"
+        header = f"AST for {symbol_name + '() in ' if symbol_name else ''}{file_path}:"
+        return f"{header}\n\n{result}"
+
+    @mcp.tool()
     def detect_clones(file_path: str | None = None, min_lines: int = 5) -> str:
         """Find duplicate or near-duplicate functions in the repo.
 
