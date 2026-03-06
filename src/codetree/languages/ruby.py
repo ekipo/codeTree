@@ -313,6 +313,12 @@ class RubyPlugin(LanguagePlugin):
     def check_syntax(self, source: bytes) -> bool:
         return _parse(source).root_node.has_error
 
+    def _get_parser(self):
+        return _PARSER
+
+    def _get_language(self):
+        return _LANGUAGE
+
     def compute_complexity(self, source: bytes, fn_name: str) -> dict | None:
         tree = _parse(source)
         fn_node = None

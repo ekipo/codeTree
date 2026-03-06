@@ -220,3 +220,55 @@ class Indexer:
                         "parent": item.get("parent"),
                     })
         return dead
+
+    def detect_clones(self, file_path: str | None = None, min_lines: int = 5) -> list[dict]:
+        """Find duplicate/near-duplicate functions across the repo.
+
+        Uses AST normalization to detect Type 1 (exact) and Type 2 (renamed) clones.
+
+        Args:
+            file_path: if given, find clones of functions in this file.
+            min_lines: minimum line count for a function to be considered.
+        Returns:
+            list of clone groups, each with "hash", "line_count", "functions".
+        """
+        import hashlib
+
+        function_hashes: dict[str, list[dict]] = {}
+
+        for rel_path, entry in self._index.items():
+            for item in entry.skeleton:
+                if item["type"] not in ("function", "method"):
+                    continue
+                result = entry.plugin.extract_symbol_source(entry.source, item["name"])
+                if result is None:
+                    continue
+                src_text, src_line = result
+                line_count = src_text.count("\n") + (0 if src_text.endswith("\n") else 1)
+                if line_count < min_lines:
+                    continue
+                normalized = entry.plugin.normalize_source_for_clones(src_text.encode("utf-8"))
+                h = hashlib.sha256(normalized.encode("utf-8")).hexdigest()
+                if h not in function_hashes:
+                    function_hashes[h] = []
+                function_hashes[h].append({
+                    "file": rel_path,
+                    "name": item["name"],
+                    "line": item["line"],
+                    "line_count": line_count,
+                })
+
+        clone_groups = []
+        for h, functions in function_hashes.items():
+            if len(functions) < 2:
+                continue
+            if file_path:
+                if not any(f["file"] == file_path for f in functions):
+                    continue
+            clone_groups.append({
+                "hash": h,
+                "line_count": functions[0]["line_count"],
+                "functions": functions,
+            })
+
+        return clone_groups

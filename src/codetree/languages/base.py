@@ -133,3 +133,55 @@ class LanguagePlugin(ABC):
     def check_syntax(self, source: bytes) -> bool:
         """Return True if the source has syntax errors."""
         return False
+
+    def normalize_source_for_clones(self, source: bytes) -> str:
+        """Normalize source for clone detection.
+
+        Replaces identifiers, strings, and numbers with placeholders
+        so that structurally identical code with renamed variables
+        produces the same normalized form.
+        """
+        try:
+            parser = self._get_parser()
+        except AttributeError:
+            return source.decode("utf-8", errors="replace")
+
+        tree = parser.parse(source)
+
+        identifier_types = {
+            "identifier", "type_identifier", "field_identifier",
+            "property_identifier", "shorthand_property_identifier",
+            "constant", "namespace_identifier",
+        }
+        string_types = {
+            "string", "string_literal", "template_string",
+            "raw_string_literal", "interpreted_string_literal",
+            "string_content", "encapsed_string",
+        }
+        number_types = {
+            "integer", "float", "number", "integer_literal",
+            "float_literal", "decimal_integer_literal",
+            "decimal_floating_point_literal",
+        }
+        comment_types = {"comment", "line_comment", "block_comment"}
+
+        parts = []
+
+        def walk(node):
+            if node.type in comment_types:
+                return
+            if not node.children or node.type in identifier_types | string_types | number_types:
+                if node.type in identifier_types:
+                    parts.append("_ID_")
+                elif node.type in string_types:
+                    parts.append("_STR_")
+                elif node.type in number_types:
+                    parts.append("_NUM_")
+                else:
+                    parts.append(node.text.decode("utf-8", errors="replace"))
+            else:
+                for child in node.children:
+                    walk(child)
+
+        walk(tree.root_node)
+        return " ".join(parts)
