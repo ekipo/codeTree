@@ -116,3 +116,38 @@ class TestDetectClones:
         indexer.build()
         clones = indexer.detect_clones(min_lines=1)
         assert clones == []
+
+
+# ─── MCP tool: detect_clones ─────────────────────────────────────────────────
+
+class TestDetectClonesTool:
+
+    def test_finds_clones(self, tmp_path):
+        (tmp_path / "a.py").write_text("def foo(a, b):\n    return a + b\n")
+        (tmp_path / "b.py").write_text("def bar(x, y):\n    return x + y\n")
+        fn = _tool(create_server(str(tmp_path)), "detect_clones")
+        result = fn(min_lines=1)
+        assert "clone group" in result.lower() or "Clone" in result
+        assert "foo" in result
+        assert "bar" in result
+
+    def test_no_clones_message(self, tmp_path):
+        (tmp_path / "a.py").write_text("def foo(a, b):\n    return a + b\n")
+        (tmp_path / "b.py").write_text("def bar(a, b):\n    return a * b\n")
+        fn = _tool(create_server(str(tmp_path)), "detect_clones")
+        result = fn(min_lines=1)
+        assert "no clones" in result.lower()
+
+    def test_per_file_mode(self, tmp_path):
+        (tmp_path / "a.py").write_text("def foo(a, b):\n    return a + b\n")
+        (tmp_path / "b.py").write_text("def bar(x, y):\n    return x + y\n")
+        fn = _tool(create_server(str(tmp_path)), "detect_clones")
+        result = fn(file_path="a.py", min_lines=1)
+        assert "foo" in result
+
+    def test_summary(self, tmp_path):
+        (tmp_path / "a.py").write_text("def foo(a, b):\n    return a + b\n")
+        (tmp_path / "b.py").write_text("def bar(x, y):\n    return x + y\n")
+        fn = _tool(create_server(str(tmp_path)), "detect_clones")
+        result = fn(min_lines=1)
+        assert "summary" in result.lower() or "group" in result.lower()

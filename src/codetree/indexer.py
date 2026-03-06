@@ -221,6 +221,50 @@ class Indexer:
                     })
         return dead
 
+    def get_blast_radius(self, file_path: str, symbol_name: str) -> dict:
+        """Find all functions transitively affected by changes to a symbol.
+
+        Returns:
+            {"callers": [{"file", "name", "line", "depth"}, ...],
+             "calls":   [{"file", "name", "line", "depth"}, ...]}
+        """
+        self._ensure_call_graph()
+
+        target_key = f"{file_path}::{symbol_name}"
+
+        def _bfs(graph: dict[str, set[str]], start: str) -> list[dict]:
+            """BFS through graph, returning nodes with depth."""
+            visited = {start}
+            queue = [(start, 0)]
+            results = []
+            while queue:
+                current, depth = queue.pop(0)
+                neighbors = graph.get(current, set())
+                for neighbor in neighbors:
+                    if neighbor not in visited and not neighbor.startswith("?::"):
+                        visited.add(neighbor)
+                        parts = neighbor.split("::", 1)
+                        n_file = parts[0]
+                        n_name = parts[1] if len(parts) > 1 else neighbor
+                        n_line = 0
+                        if n_name in self._definitions:
+                            for def_file, def_line in self._definitions[n_name]:
+                                if def_file == n_file:
+                                    n_line = def_line
+                                    break
+                        results.append({
+                            "file": n_file,
+                            "name": n_name,
+                            "line": n_line,
+                            "depth": depth + 1,
+                        })
+                        queue.append((neighbor, depth + 1))
+            return results
+
+        callers = _bfs(self._reverse_graph, target_key)
+        calls = _bfs(self._call_graph, target_key)
+        return {"callers": callers, "calls": calls}
+
     def detect_clones(self, file_path: str | None = None, min_lines: int = 5) -> list[dict]:
         """Find duplicate/near-duplicate functions across the repo.
 

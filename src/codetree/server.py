@@ -262,6 +262,73 @@ def create_server(root: str) -> FastMCP:
         lines.append(f"\nSummary: {total} dead symbol{'s' if total != 1 else ''} across {file_count} file{'s' if file_count != 1 else ''}")
         return "\n".join(lines)
 
+    @mcp.tool()
+    def get_blast_radius(file_path: str, symbol_name: str) -> str:
+        """Find all functions transitively affected if a symbol is changed.
+
+        Shows direct and indirect callers (what breaks) and dependencies (what it relies on).
+
+        Args:
+            file_path: path relative to the repo root
+            symbol_name: name of the function/method to analyze
+        """
+        if file_path not in indexer._index:
+            return f"File not found: {file_path}"
+        result = indexer.get_blast_radius(file_path, symbol_name)
+        lines = [f"Blast radius for {symbol_name}() in {file_path}:"]
+
+        callers = result["callers"]
+        if callers:
+            by_depth: dict[int, list] = {}
+            for c in callers:
+                by_depth.setdefault(c["depth"], []).append(c)
+            for depth in sorted(by_depth):
+                label = "Direct callers" if depth == 1 else f"Indirect callers (depth {depth})"
+                lines.append(f"\n{label}:")
+                for c in by_depth[depth]:
+                    lines.append(f"  {c['file']}: {c['name']}() → line {c['line']}")
+        else:
+            lines.append("\nCallers: (none — no functions call this)")
+
+        calls = result["calls"]
+        if calls:
+            lines.append("\nDependencies (what it calls):")
+            for c in calls:
+                lines.append(f"  {c['file']}: {c['name']}() → line {c['line']}")
+        else:
+            lines.append("\nDependencies: (none — leaf function)")
+
+        total_affected = len(callers)
+        affected_files = len(set(c["file"] for c in callers))
+        lines.append(f"\nImpact summary: {total_affected} function{'s' if total_affected != 1 else ''} in {affected_files} file{'s' if affected_files != 1 else ''} may be affected")
+        return "\n".join(lines)
+
+    @mcp.tool()
+    def detect_clones(file_path: str | None = None, min_lines: int = 5) -> str:
+        """Find duplicate or near-duplicate functions in the repo.
+
+        Detects Type 1 (exact copies) and Type 2 (copies with renamed variables).
+
+        Args:
+            file_path: optional — if given, find clones of functions in this file.
+            min_lines: minimum function line count to consider (default 5).
+        """
+        clones = indexer.detect_clones(file_path=file_path, min_lines=min_lines)
+        if not clones:
+            scope = file_path if file_path else "the repo"
+            return f"No clones found in {scope} (min_lines={min_lines})."
+        lines = []
+        for i, group in enumerate(clones, 1):
+            count = len(group["functions"])
+            lc = group["line_count"]
+            lines.append(f"Clone group {i} ({count} functions, {lc} lines each):")
+            for fn in group["functions"]:
+                lines.append(f"  {fn['file']}: {fn['name']}() → line {fn['line']}")
+        total_groups = len(clones)
+        total_fns = sum(len(g["functions"]) for g in clones)
+        lines.append(f"\nSummary: {total_groups} clone group{'s' if total_groups != 1 else ''}, {total_fns} functions")
+        return "\n".join(lines)
+
     return mcp
 
 
