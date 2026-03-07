@@ -373,9 +373,10 @@ uvx mcp-server-codetree --root .
 ## 14. Brand / Naming Notes
 
 - **Product name:** codetree (lowercase, one word)
-- **Package name:** `codetree` (PyPI)
+- **Package name:** `mcp-server-codetree` (PyPI) — https://pypi.org/project/mcp-server-codetree/
 - **CLI command:** `codetree`
-- **GitHub:** ThinkyMiner/codeTree
+- **Install command:** `uvx mcp-server-codetree --root .`
+- **GitHub:** https://github.com/ThinkyMiner/codeTree
 - **Tagline options:**
   - "Structured code understanding for AI agents"
   - "Stop feeding entire files to your AI"
