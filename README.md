@@ -9,13 +9,13 @@ Instead of reading entire files, an agent can ask *"what classes are in this fil
 Add to Claude Code with one command:
 
 ```bash
-claude mcp add codetree -- uvx codetree --root /path/to/your/project
+claude mcp add codetree -- uvx mcp-server-codetree --root /path/to/your/project
 ```
 
 Or run standalone:
 
 ```bash
-uvx codetree --root /path/to/your/project
+uvx mcp-server-codetree --root /path/to/your/project
 ```
 
 > **Note:** Requires [uv](https://docs.astral.sh/uv/getting-started/installation/) to be installed. `uvx` downloads and runs the package automatically — no manual install needed.
@@ -67,7 +67,7 @@ codetree exposes **16 tools** over MCP:
 ### Claude Code
 
 ```bash
-claude mcp add codetree -- uvx codetree --root /path/to/your/project
+claude mcp add codetree -- uvx mcp-server-codetree --root /path/to/your/project
 ```
 
 ### Cursor
@@ -79,7 +79,7 @@ Add to `.cursor/mcp.json`:
   "mcpServers": {
     "codetree": {
       "command": "uvx",
-      "args": ["codetree", "--root", "/path/to/your/project"]
+      "args": ["mcp-server-codetree", "--root", "/path/to/your/project"]
     }
   }
 }
@@ -94,7 +94,7 @@ Add to `.vscode/mcp.json`:
   "servers": {
     "codetree": {
       "command": "uvx",
-      "args": ["codetree", "--root", "/path/to/your/project"]
+      "args": ["mcp-server-codetree", "--root", "/path/to/your/project"]
     }
   }
 }
@@ -109,7 +109,7 @@ Add to `~/.codeium/windsurf/mcp_config.json`:
   "mcpServers": {
     "codetree": {
       "command": "uvx",
-      "args": ["codetree", "--root", "/path/to/your/project"]
+      "args": ["mcp-server-codetree", "--root", "/path/to/your/project"]
     }
   }
 }
@@ -124,7 +124,7 @@ Add to `~/Library/Application Support/Claude/claude_desktop_config.json` (macOS)
   "mcpServers": {
     "codetree": {
       "command": "uvx",
-      "args": ["codetree", "--root", "/path/to/your/project"]
+      "args": ["mcp-server-codetree", "--root", "/path/to/your/project"]
     }
   }
 }

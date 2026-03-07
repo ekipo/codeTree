@@ -15,7 +15,7 @@ codetree is an MCP server that gives coding agents structured code understanding
 **One-liner pitch:**
 Instead of `cat main.py` (500 lines, 12K tokens), your agent calls `get_file_skeleton("main.py")` and gets 15 lines of structured output.
 
-**CTA:** `claude mcp add codetree -- uvx codetree --root .`
+**CTA:** `claude mcp add codetree -- uvx mcp-server-codetree --root .`
 
 ---
 
@@ -55,7 +55,7 @@ codetree → tree-sitter parses the file
 Structured answer back to the agent
 ```
 
-**Startup:** ~1 second. No vector DB, no embedding model, no separate daemon. Just `uvx codetree`.
+**Startup:** ~1 second. No vector DB, no embedding model, no separate daemon. Just `uvx mcp-server-codetree`.
 
 ---
 
@@ -194,7 +194,7 @@ codetree speaks MCP over stdio — it works with any editor or tool that support
 
 ### Claude Code
 ```bash
-claude mcp add codetree -- uvx codetree --root /path/to/your/project
+claude mcp add codetree -- uvx mcp-server-codetree --root /path/to/your/project
 ```
 
 ### Cursor
@@ -204,7 +204,7 @@ claude mcp add codetree -- uvx codetree --root /path/to/your/project
   "mcpServers": {
     "codetree": {
       "command": "uvx",
-      "args": ["codetree", "--root", "/path/to/your/project"]
+      "args": ["mcp-server-codetree", "--root", "/path/to/your/project"]
     }
   }
 }
@@ -217,7 +217,7 @@ claude mcp add codetree -- uvx codetree --root /path/to/your/project
   "servers": {
     "codetree": {
       "command": "uvx",
-      "args": ["codetree", "--root", "/path/to/your/project"]
+      "args": ["mcp-server-codetree", "--root", "/path/to/your/project"]
     }
   }
 }
@@ -230,7 +230,7 @@ claude mcp add codetree -- uvx codetree --root /path/to/your/project
   "mcpServers": {
     "codetree": {
       "command": "uvx",
-      "args": ["codetree", "--root", "/path/to/your/project"]
+      "args": ["mcp-server-codetree", "--root", "/path/to/your/project"]
     }
   }
 }
@@ -243,7 +243,7 @@ claude mcp add codetree -- uvx codetree --root /path/to/your/project
   "mcpServers": {
     "codetree": {
       "command": "uvx",
-      "args": ["codetree", "--root", "/path/to/your/project"]
+      "args": ["mcp-server-codetree", "--root", "/path/to/your/project"]
     }
   }
 }
@@ -314,7 +314,7 @@ claude mcp add codetree -- uvx codetree --root /path/to/your/project
 | File extensions | 16 |
 | Test count | 921 |
 | Startup time | ~1 second |
-| Install | `uvx codetree` |
+| Install | `uvx mcp-server-codetree` |
 | Python support | 3.10, 3.11, 3.12, 3.13 |
 | License | MIT |
 | Dependencies | tree-sitter + fastmcp (no ML, no DB) |
@@ -349,10 +349,10 @@ claude mcp add codetree -- uvx codetree --root /path/to/your/project
 
 ```bash
 # Add to Claude Code (one command — that's it)
-claude mcp add codetree -- uvx codetree --root .
+claude mcp add codetree -- uvx mcp-server-codetree --root .
 
 # Or run standalone
-uvx codetree --root .
+uvx mcp-server-codetree --root .
 ```
 
 **GitHub:** https://github.com/ThinkyMiner/codeTree
