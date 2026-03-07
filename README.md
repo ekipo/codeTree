@@ -6,17 +6,21 @@ Instead of reading entire files, an agent can ask *"what classes are in this fil
 
 ## Quick Start
 
-```bash
-pip install codetree
-```
-
-Point it at any repo:
+Add to Claude Code with one command:
 
 ```bash
-codetree --root /path/to/your/project
+claude mcp add codetree -- uvx codetree --root /path/to/your/project
 ```
 
-Then configure your editor (see [Editor Setup](#editor-setup) below).
+Or run standalone:
+
+```bash
+uvx codetree --root /path/to/your/project
+```
+
+> **Note:** Requires [uv](https://docs.astral.sh/uv/getting-started/installation/) to be installed. `uvx` downloads and runs the package automatically — no manual install needed.
+
+See [Editor Setup](#editor-setup) below for Cursor, VS Code, Windsurf, and Claude Desktop.
 
 ## Tools
 
@@ -63,7 +67,7 @@ codetree exposes **16 tools** over MCP:
 ### Claude Code
 
 ```bash
-claude mcp add codetree -- codetree --root /path/to/your/project
+claude mcp add codetree -- uvx codetree --root /path/to/your/project
 ```
 
 ### Cursor
@@ -74,8 +78,8 @@ Add to `.cursor/mcp.json`:
 {
   "mcpServers": {
     "codetree": {
-      "command": "codetree",
-      "args": ["--root", "/path/to/your/project"]
+      "command": "uvx",
+      "args": ["codetree", "--root", "/path/to/your/project"]
     }
   }
 }
@@ -89,8 +93,8 @@ Add to `.vscode/mcp.json`:
 {
   "servers": {
     "codetree": {
-      "command": "codetree",
-      "args": ["--root", "/path/to/your/project"]
+      "command": "uvx",
+      "args": ["codetree", "--root", "/path/to/your/project"]
     }
   }
 }
@@ -104,8 +108,8 @@ Add to `~/.codeium/windsurf/mcp_config.json`:
 {
   "mcpServers": {
     "codetree": {
-      "command": "codetree",
-      "args": ["--root", "/path/to/your/project"]
+      "command": "uvx",
+      "args": ["codetree", "--root", "/path/to/your/project"]
     }
   }
 }
@@ -119,8 +123,8 @@ Add to `~/Library/Application Support/Claude/claude_desktop_config.json` (macOS)
 {
   "mcpServers": {
     "codetree": {
-      "command": "codetree",
-      "args": ["--root", "/path/to/your/project"]
+      "command": "uvx",
+      "args": ["codetree", "--root", "/path/to/your/project"]
     }
   }
 }
