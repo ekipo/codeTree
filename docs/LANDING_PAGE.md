@@ -18,7 +18,7 @@ Instead of `cat main.py` (500 lines, 12K tokens), your agent calls `get_file_ske
 **CTA:**
 ```bash
 cd your-project
-claude mcp add codetree -- uvx mcp-server-codetree --root .
+claude mcp add codetree -- uvx --from mcp-server-codetree codetree --root .
 ```
 
 ---
@@ -59,7 +59,7 @@ codetree → tree-sitter parses the file
 Structured answer back to the agent
 ```
 
-**Startup:** ~1 second. No vector DB, no embedding model, no separate daemon. Just `uvx mcp-server-codetree`.
+**Startup:** ~1 second. No vector DB, no embedding model, no separate daemon. Just `uvx --from mcp-server-codetree codetree`.
 
 ---
 
@@ -201,7 +201,7 @@ The `--root` flag tells codetree which project to analyze. Use `.` for "this pro
 ### Claude Code
 `cd` into your project, then:
 ```bash
-claude mcp add codetree -- uvx mcp-server-codetree --root .
+claude mcp add codetree -- uvx --from mcp-server-codetree codetree --root .
 ```
 
 ### Cursor
@@ -211,7 +211,7 @@ claude mcp add codetree -- uvx mcp-server-codetree --root .
   "mcpServers": {
     "codetree": {
       "command": "uvx",
-      "args": ["mcp-server-codetree", "--root", "${workspaceFolder}"]
+      "args": ["--from", "mcp-server-codetree", "codetree", "--root", "${workspaceFolder}"]
     }
   }
 }
@@ -224,7 +224,7 @@ claude mcp add codetree -- uvx mcp-server-codetree --root .
   "servers": {
     "codetree": {
       "command": "uvx",
-      "args": ["mcp-server-codetree", "--root", "${workspaceFolder}"]
+      "args": ["--from", "mcp-server-codetree", "codetree", "--root", "${workspaceFolder}"]
     }
   }
 }
@@ -237,7 +237,7 @@ claude mcp add codetree -- uvx mcp-server-codetree --root .
   "mcpServers": {
     "codetree": {
       "command": "uvx",
-      "args": ["mcp-server-codetree", "--root", "${workspaceFolder}"]
+      "args": ["--from", "mcp-server-codetree", "codetree", "--root", "${workspaceFolder}"]
     }
   }
 }
@@ -250,7 +250,7 @@ claude mcp add codetree -- uvx mcp-server-codetree --root .
   "mcpServers": {
     "codetree": {
       "command": "uvx",
-      "args": ["mcp-server-codetree", "--root", "/path/to/your/project"]
+      "args": ["--from", "mcp-server-codetree", "codetree", "--root", "/path/to/your/project"]
     }
   }
 }
@@ -322,7 +322,7 @@ claude mcp add codetree -- uvx mcp-server-codetree --root .
 | File extensions | 16 |
 | Test count | 921 |
 | Startup time | ~1 second |
-| Install | `uvx mcp-server-codetree` |
+| Install | `uvx --from mcp-server-codetree codetree` |
 | Python support | 3.10, 3.11, 3.12, 3.13 |
 | License | MIT |
 | Dependencies | tree-sitter + fastmcp (no ML, no DB) |
@@ -358,7 +358,7 @@ claude mcp add codetree -- uvx mcp-server-codetree --root .
 ```bash
 # cd into any project and run one command
 cd your-project
-claude mcp add codetree -- uvx mcp-server-codetree --root .
+claude mcp add codetree -- uvx --from mcp-server-codetree codetree --root .
 
 # That's it. Your agent now has structured code understanding.
 ```
@@ -383,7 +383,7 @@ claude mcp add codetree -- uvx mcp-server-codetree --root .
 - **Product name:** codetree (lowercase, one word)
 - **Package name:** `mcp-server-codetree` (PyPI) — https://pypi.org/project/mcp-server-codetree/
 - **CLI command:** `codetree`
-- **Install command:** `uvx mcp-server-codetree --root .`
+- **Install command:** `uvx --from mcp-server-codetree codetree --root .`
 - **GitHub:** https://github.com/ThinkyMiner/codeTree
 - **Tagline options:**
   - "Structured code understanding for AI agents"

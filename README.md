@@ -11,7 +11,7 @@ Instead of reading entire files, an agent can ask *"what classes are in this fil
 Then `cd` into any project and run:
 
 ```bash
-claude mcp add codetree -- uvx mcp-server-codetree --root .
+claude mcp add codetree -- uvx --from mcp-server-codetree codetree --root .
 ```
 
 That's it. The `.` means "this project." Your agent now has structured code understanding.
@@ -67,7 +67,7 @@ The `--root` flag tells codetree which project to analyze. Use `.` for the curre
 `cd` into your project, then:
 
 ```bash
-claude mcp add codetree -- uvx mcp-server-codetree --root .
+claude mcp add codetree -- uvx --from mcp-server-codetree codetree --root .
 ```
 
 ### Cursor
@@ -79,7 +79,7 @@ Add to `.cursor/mcp.json` in your project:
   "mcpServers": {
     "codetree": {
       "command": "uvx",
-      "args": ["mcp-server-codetree", "--root", "${workspaceFolder}"]
+      "args": ["--from", "mcp-server-codetree", "codetree", "--root", "${workspaceFolder}"]
     }
   }
 }
@@ -94,7 +94,7 @@ Add to `.vscode/mcp.json` in your project:
   "servers": {
     "codetree": {
       "command": "uvx",
-      "args": ["mcp-server-codetree", "--root", "${workspaceFolder}"]
+      "args": ["--from", "mcp-server-codetree", "codetree", "--root", "${workspaceFolder}"]
     }
   }
 }
@@ -109,7 +109,7 @@ Add to `~/.codeium/windsurf/mcp_config.json`:
   "mcpServers": {
     "codetree": {
       "command": "uvx",
-      "args": ["mcp-server-codetree", "--root", "${workspaceFolder}"]
+      "args": ["--from", "mcp-server-codetree", "codetree", "--root", "${workspaceFolder}"]
     }
   }
 }
@@ -124,7 +124,7 @@ Add to `~/Library/Application Support/Claude/claude_desktop_config.json` (macOS)
   "mcpServers": {
     "codetree": {
       "command": "uvx",
-      "args": ["mcp-server-codetree", "--root", "/path/to/your/project"]
+      "args": ["--from", "mcp-server-codetree", "codetree", "--root", "/path/to/your/project"]
     }
   }
 }
