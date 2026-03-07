@@ -15,7 +15,11 @@ codetree is an MCP server that gives coding agents structured code understanding
 **One-liner pitch:**
 Instead of `cat main.py` (500 lines, 12K tokens), your agent calls `get_file_skeleton("main.py")` and gets 15 lines of structured output.
 
-**CTA:** `claude mcp add codetree -- uvx mcp-server-codetree --root .`
+**CTA:**
+```bash
+cd your-project
+claude mcp add codetree -- uvx mcp-server-codetree --root .
+```
 
 ---
 
@@ -192,9 +196,12 @@ Adding a new language is mechanical: copy a template file, implement 5 methods, 
 
 codetree speaks MCP over stdio — it works with any editor or tool that supports the Model Context Protocol.
 
+The `--root` flag tells codetree which project to analyze. Use `.` for "this project" or a full path. IDE configs can use `${workspaceFolder}` to auto-target the open project.
+
 ### Claude Code
+`cd` into your project, then:
 ```bash
-claude mcp add codetree -- uvx mcp-server-codetree --root /path/to/your/project
+claude mcp add codetree -- uvx mcp-server-codetree --root .
 ```
 
 ### Cursor
@@ -204,7 +211,7 @@ claude mcp add codetree -- uvx mcp-server-codetree --root /path/to/your/project
   "mcpServers": {
     "codetree": {
       "command": "uvx",
-      "args": ["mcp-server-codetree", "--root", "/path/to/your/project"]
+      "args": ["mcp-server-codetree", "--root", "${workspaceFolder}"]
     }
   }
 }
@@ -217,7 +224,7 @@ claude mcp add codetree -- uvx mcp-server-codetree --root /path/to/your/project
   "servers": {
     "codetree": {
       "command": "uvx",
-      "args": ["mcp-server-codetree", "--root", "/path/to/your/project"]
+      "args": ["mcp-server-codetree", "--root", "${workspaceFolder}"]
     }
   }
 }
@@ -230,7 +237,7 @@ claude mcp add codetree -- uvx mcp-server-codetree --root /path/to/your/project
   "mcpServers": {
     "codetree": {
       "command": "uvx",
-      "args": ["mcp-server-codetree", "--root", "/path/to/your/project"]
+      "args": ["mcp-server-codetree", "--root", "${workspaceFolder}"]
     }
   }
 }
@@ -248,6 +255,7 @@ claude mcp add codetree -- uvx mcp-server-codetree --root /path/to/your/project
   }
 }
 ```
+> Claude Desktop doesn't support `${workspaceFolder}`, so use a full path.
 
 ---
 
@@ -348,11 +356,11 @@ claude mcp add codetree -- uvx mcp-server-codetree --root /path/to/your/project
 ## 12. Getting Started (bottom of page CTA)
 
 ```bash
-# Add to Claude Code (one command — that's it)
+# cd into any project and run one command
+cd your-project
 claude mcp add codetree -- uvx mcp-server-codetree --root .
 
-# Or run standalone
-uvx mcp-server-codetree --root .
+# That's it. Your agent now has structured code understanding.
 ```
 
 **GitHub:** https://github.com/ThinkyMiner/codeTree

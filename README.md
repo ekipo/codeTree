@@ -6,21 +6,17 @@ Instead of reading entire files, an agent can ask *"what classes are in this fil
 
 ## Quick Start
 
-Add to Claude Code with one command:
+**Prerequisite:** Install [uv](https://docs.astral.sh/uv/getting-started/installation/) if you don't have it (`curl -LsSf https://astral.sh/uv/install.sh | sh`).
+
+Then `cd` into any project and run:
 
 ```bash
-claude mcp add codetree -- uvx mcp-server-codetree --root /path/to/your/project
+claude mcp add codetree -- uvx mcp-server-codetree --root .
 ```
 
-Or run standalone:
+That's it. The `.` means "this project." Your agent now has structured code understanding.
 
-```bash
-uvx mcp-server-codetree --root /path/to/your/project
-```
-
-> **Note:** Requires [uv](https://docs.astral.sh/uv/getting-started/installation/) to be installed. `uvx` downloads and runs the package automatically — no manual install needed.
-
-See [Editor Setup](#editor-setup) below for Cursor, VS Code, Windsurf, and Claude Desktop.
+> Not using Claude Code? See [Editor Setup](#editor-setup) for Cursor, VS Code, Windsurf, and Claude Desktop.
 
 ## Tools
 
@@ -64,22 +60,26 @@ codetree exposes **16 tools** over MCP:
 
 ## Editor Setup
 
+The `--root` flag tells codetree which project to analyze. Use `.` for the current directory, or a full path like `/Users/you/my-project`.
+
 ### Claude Code
 
+`cd` into your project, then:
+
 ```bash
-claude mcp add codetree -- uvx mcp-server-codetree --root /path/to/your/project
+claude mcp add codetree -- uvx mcp-server-codetree --root .
 ```
 
 ### Cursor
 
-Add to `.cursor/mcp.json`:
+Add to `.cursor/mcp.json` in your project:
 
 ```json
 {
   "mcpServers": {
     "codetree": {
       "command": "uvx",
-      "args": ["mcp-server-codetree", "--root", "/path/to/your/project"]
+      "args": ["mcp-server-codetree", "--root", "${workspaceFolder}"]
     }
   }
 }
@@ -87,14 +87,14 @@ Add to `.cursor/mcp.json`:
 
 ### VS Code (Copilot)
 
-Add to `.vscode/mcp.json`:
+Add to `.vscode/mcp.json` in your project:
 
 ```json
 {
   "servers": {
     "codetree": {
       "command": "uvx",
-      "args": ["mcp-server-codetree", "--root", "/path/to/your/project"]
+      "args": ["mcp-server-codetree", "--root", "${workspaceFolder}"]
     }
   }
 }
@@ -109,7 +109,7 @@ Add to `~/.codeium/windsurf/mcp_config.json`:
   "mcpServers": {
     "codetree": {
       "command": "uvx",
-      "args": ["mcp-server-codetree", "--root", "/path/to/your/project"]
+      "args": ["mcp-server-codetree", "--root", "${workspaceFolder}"]
     }
   }
 }
@@ -129,6 +129,8 @@ Add to `~/Library/Application Support/Claude/claude_desktop_config.json` (macOS)
   }
 }
 ```
+
+> Claude Desktop doesn't support `${workspaceFolder}`, so use a full path here.
 
 ## Architecture
 
@@ -154,7 +156,7 @@ MCP tool call → server.py → indexer.py → LanguagePlugin → tree-sitter �
 
 ```bash
 git clone https://github.com/ThinkyMiner/codeTree.git
-cd codetree
+cd codeTree
 python -m venv .venv
 source .venv/bin/activate
 pip install -e .
