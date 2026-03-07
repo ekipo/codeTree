@@ -26,6 +26,7 @@ def test_concrete_plugin_with_all_methods_works():
         def extract_symbol_source(self, source, name): return None
         def extract_calls_in_function(self, source, fn_name): return []
         def extract_symbol_usages(self, source, name): return []
+        def extract_imports(self, source): return []
 
     plugin = Complete()
     assert plugin.extensions == (".x",)

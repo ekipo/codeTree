@@ -1,7 +1,22 @@
 [project]
 name = "codetree"
 version = "0.1.0"
+description = "MCP server that gives coding agents structured code understanding via tree-sitter"
+readme = "README.md"
+license = "MIT"
 requires-python = ">=3.10"
+keywords = ["mcp", "tree-sitter", "code-analysis", "coding-agents", "model-context-protocol"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Software Development :: Libraries",
+]
 dependencies = [
     "tree-sitter>=0.23.0",
     "tree-sitter-python>=0.23.0",
@@ -18,6 +33,11 @@ dependencies = [
 
 [project.scripts]
 codetree = "codetree.__main__:main"
+
+[project.urls]
+Homepage = "https://github.com/ThinkyMiner/codeTree"
+Repository = "https://github.com/ThinkyMiner/codeTree"
+Issues = "https://github.com/ThinkyMiner/codeTree/issues"
 
 [build-system]
 requires = ["hatchling"]

@@ -6,7 +6,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 codetree is a Python MCP (Model Context Protocol) server that gives coding agents structured code understanding via tree-sitter. Instead of reading entire files, an agent can ask "what classes are in this file?" or "what does this function call?" and get precise, structured answers.
 
-It exposes **17 tools** over MCP:
+It exposes **16 tools** over MCP:
 
 | Tool | Purpose | Returns |
 |------|---------|---------|
