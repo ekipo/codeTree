@@ -37,6 +37,8 @@ class GraphBuilder:
             indexer = Indexer(str(self._root))
             indexer.build()
 
+        self._store.begin()
+
         # Get current files on disk
         current_files = {}
         for rel_path, entry in indexer._index.items():
@@ -147,6 +149,31 @@ class GraphBuilder:
                             edges_created += 1
                             break
 
+        # ── Pass 3: Build TESTS edges (link test functions to tested symbols) ──
+        for rel_path, info in changed_files:
+            entry = info["entry"]
+            if not self._is_test_file(rel_path):
+                continue
+            for item in entry.skeleton:
+                if item["type"] not in ("function", "method"):
+                    continue
+                name = item["name"]
+                # Convention: test_foo tests foo, TestFoo tests Foo
+                tested_name = None
+                if name.startswith("test_"):
+                    tested_name = name[5:]  # strip test_ prefix
+                elif name.startswith("Test"):
+                    tested_name = name[4:]  # strip Test prefix
+                if not tested_name:
+                    continue
+                targets = self._store.symbols_by_name(tested_name)
+                if targets:
+                    test_qn = make_qualified_name(rel_path, name, item.get("parent"))
+                    for t in targets:
+                        if not t.is_test:
+                            self._store.upsert_edge(Edge(test_qn, t.qualified_name, "TESTS"))
+                            edges_created += 1
+
         # Delete files that no longer exist
         for stored_file in self._store.all_files():
             if stored_file["file_path"] not in indexed_paths:
@@ -156,6 +183,7 @@ class GraphBuilder:
                 self._store.delete_file(fp)
 
         self._store.set_meta("last_indexed_at", str(time.time()))
+        self._store.commit()
 
         return {
             "files_indexed": files_indexed,

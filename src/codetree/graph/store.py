@@ -55,6 +55,7 @@ class GraphStore:
         self._root = Path(root)
         self._db_path = self._root / ".codetree" / "graph.db"
         self._conn: sqlite3.Connection | None = None
+        self._in_transaction = False
 
     def open(self):
         self._db_path.parent.mkdir(parents=True, exist_ok=True)
@@ -76,6 +77,25 @@ class GraphStore:
             self._conn.close()
             self._conn = None
 
+    def begin(self):
+        """Begin a transaction. Commits are deferred until commit() is called."""
+        self._in_transaction = True
+
+    def commit(self):
+        """Commit the current transaction."""
+        if self._conn:
+            self._conn.commit()
+        self._in_transaction = False
+
+    def _auto_commit(self):
+        """Commit unless inside an explicit transaction."""
+        if not self._in_transaction and self._conn:
+            self._conn.commit()
+
+    def execute(self, sql: str, params: tuple = ()) -> sqlite3.Cursor:
+        """Execute a SQL query and return the cursor. Public API for queries."""
+        return self._conn.execute(sql, params)
+
     # -- Meta --------------------------------------------------------------
 
     def get_meta(self, key: str) -> str | None:
@@ -88,7 +108,7 @@ class GraphStore:
             "INSERT OR REPLACE INTO meta (key, value) VALUES (?, ?)",
             (key, value),
         )
-        self._conn.commit()
+        self._auto_commit()
 
     # -- Files -------------------------------------------------------------
 
@@ -98,7 +118,7 @@ class GraphStore:
             "VALUES (?, ?, ?, ?, ?)",
             (file_path, sha256, language, int(is_test), time.time()),
         )
-        self._conn.commit()
+        self._auto_commit()
 
     def get_file(self, file_path: str) -> dict | None:
         cur = self._conn.execute(
@@ -118,7 +138,7 @@ class GraphStore:
 
     def delete_file(self, file_path: str):
         self._conn.execute("DELETE FROM files WHERE file_path=?", (file_path,))
-        self._conn.commit()
+        self._auto_commit()
 
     def all_files(self) -> list[dict]:
         cur = self._conn.execute(
@@ -143,7 +163,7 @@ class GraphStore:
                 sym.doc, sym.params, int(sym.is_test), int(sym.is_entry_point),
             ),
         )
-        self._conn.commit()
+        self._auto_commit()
 
     def get_symbol(self, qualified_name: str) -> SymbolNode | None:
         cur = self._conn.execute(
@@ -195,7 +215,7 @@ class GraphStore:
 
     def delete_symbols_for_file(self, file_path: str):
         self._conn.execute("DELETE FROM symbols WHERE file_path=?", (file_path,))
-        self._conn.commit()
+        self._auto_commit()
 
     # -- Edges -------------------------------------------------------------
 
@@ -205,7 +225,7 @@ class GraphStore:
             "VALUES (?, ?, ?, ?)",
             (edge.source_qn, edge.target_qn, edge.type, edge.weight),
         )
-        self._conn.commit()
+        self._auto_commit()
 
     def edges_from(self, source_qn: str, edge_type: str | None = None) -> list[Edge]:
         if edge_type:
@@ -241,7 +261,7 @@ class GraphStore:
             "DELETE FROM edges WHERE source_qn LIKE ? OR target_qn LIKE ?",
             (prefix + "%", prefix + "%"),
         )
-        self._conn.commit()
+        self._auto_commit()
 
     # -- Stats -------------------------------------------------------------
 

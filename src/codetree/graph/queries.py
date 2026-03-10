@@ -9,7 +9,7 @@ class GraphQueries:
 
     def repository_map(self, include: list[str] | None = None, max_items: int = 5) -> dict:
         """Return a compact repo overview for agent onboarding."""
-        conn = self._store._conn
+        conn = self._store
 
         # Languages
         cur = conn.execute("SELECT language, COUNT(*) FROM files GROUP BY language ORDER BY COUNT(*) DESC")
@@ -86,7 +86,7 @@ class GraphQueries:
     def resolve_symbol(self, query: str, kind: str | None = None,
                        path_hint: str | None = None, limit: int = 10) -> list[SymbolNode]:
         """Disambiguate a short symbol name into ranked qualified matches."""
-        conn = self._store._conn
+        conn = self._store
 
         # Find all symbols matching the name (case-insensitive)
         cur = conn.execute(
@@ -126,7 +126,7 @@ class GraphQueries:
                      direction: str | None = None, min_degree: int | None = None,
                      max_degree: int | None = None, limit: int = 10, offset: int = 0) -> dict:
         """Structured graph search with filters and pagination."""
-        conn = self._store._conn
+        conn = self._store
 
         # Build WHERE clause
         conditions = []
