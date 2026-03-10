@@ -198,3 +198,108 @@ class GraphQueries:
             "has_more": offset + limit < total,
             "results": page,
         }
+
+    def change_impact(self, symbol_query: str | None = None,
+                      diff_scope: str | None = None,
+                      root: str | None = None, depth: int = 3) -> dict:
+        """Analyze impact of a change — by explicit symbol or git diff."""
+        changed_qns = []
+
+        if diff_scope and root:
+            changed_qns = self._symbols_from_diff(diff_scope, root)
+        elif symbol_query:
+            syms = self._store.symbols_by_name(symbol_query)
+            changed_qns = [s.qualified_name for s in syms if not s.is_test]
+
+        if not changed_qns:
+            return {"changed_symbols": [], "impact": {}, "affected_tests": []}
+
+        # BFS through reverse call edges
+        risk_labels = {1: "CRITICAL", 2: "HIGH", 3: "MEDIUM"}
+        impact: dict[str, list] = {}
+        affected_tests = []
+        visited = set(changed_qns)
+        queue = [(qn, 0) for qn in changed_qns]
+
+        while queue:
+            current_qn, current_depth = queue.pop(0)
+            if current_depth >= depth:
+                continue
+            # Check both resolved (file::name) and unresolved (?::name) edges
+            callers = self._store.edges_to(current_qn, edge_type="CALLS")
+            # Also check unresolved form: callers may point to ?::name
+            parts = current_qn.rsplit("::", 1)
+            if len(parts) == 2 and not parts[0].startswith("?"):
+                unresolved_qn = f"?::{parts[1]}"
+                callers = callers + self._store.edges_to(unresolved_qn, edge_type="CALLS")
+            for edge in callers:
+                caller_qn = edge.source_qn
+                if caller_qn in visited or caller_qn.startswith("?::"):
+                    continue
+                visited.add(caller_qn)
+                hop = current_depth + 1
+                sym = self._store.get_symbol(caller_qn)
+                if sym is None:
+                    continue
+                entry = {
+                    "qualified_name": caller_qn,
+                    "name": sym.name,
+                    "file": sym.file_path,
+                    "line": sym.start_line,
+                    "hop": hop,
+                }
+                if sym.is_test:
+                    affected_tests.append(entry)
+                else:
+                    label = risk_labels.get(hop, "LOW")
+                    impact.setdefault(label, []).append(entry)
+                queue.append((caller_qn, hop))
+
+        # Also find tests via TESTS edges
+        for qn in changed_qns:
+            test_edges = self._store.edges_to(qn, edge_type="TESTS")
+            for e in test_edges:
+                sym = self._store.get_symbol(e.source_qn)
+                if sym and sym.qualified_name not in visited:
+                    affected_tests.append({
+                        "qualified_name": sym.qualified_name,
+                        "name": sym.name,
+                        "file": sym.file_path,
+                        "line": sym.start_line,
+                        "hop": 0,
+                    })
+
+        changed_info = []
+        for qn in changed_qns:
+            sym = self._store.get_symbol(qn)
+            if sym:
+                changed_info.append({"qualified_name": qn, "name": sym.name, "file": sym.file_path})
+
+        return {
+            "changed_symbols": changed_info,
+            "impact": impact,
+            "affected_tests": affected_tests,
+        }
+
+    def _symbols_from_diff(self, diff_scope: str, root: str) -> list[str]:
+        """Extract changed symbol qualified names from git diff."""
+        import subprocess
+
+        if diff_scope == "working":
+            cmd = ["git", "diff", "--name-only"]
+        elif diff_scope == "staged":
+            cmd = ["git", "diff", "--staged", "--name-only"]
+        else:
+            cmd = ["git", "diff", diff_scope, "--name-only"]
+
+        try:
+            result = subprocess.run(cmd, cwd=root, capture_output=True, text=True, timeout=10)
+            changed_files = [f.strip() for f in result.stdout.strip().split("\n") if f.strip()]
+        except Exception:
+            return []
+
+        changed_qns = []
+        for fp in changed_files:
+            syms = self._store.symbols_by_file(fp)
+            changed_qns.extend(s.qualified_name for s in syms if not s.is_test)
+        return changed_qns

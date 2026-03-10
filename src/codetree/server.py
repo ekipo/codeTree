@@ -574,6 +574,25 @@ def create_server(root: str) -> FastMCP:
             ],
         }
 
+    @mcp.tool()
+    def get_change_impact(symbol_query: str | None = None,
+                          diff_scope: str | None = None, depth: int = 3) -> dict:
+        """Analyze impact of a change — by explicit symbol or git diff.
+
+        Shows direct/transitive callers with risk classification and affected tests.
+
+        Args:
+            symbol_query: symbol name to analyze (e.g., "add")
+            diff_scope: "working" (uncommitted), "staged", or "HEAD~1" for git-based analysis
+            depth: max hop depth (default 3)
+        """
+        return graph_queries.change_impact(
+            symbol_query=symbol_query,
+            diff_scope=diff_scope,
+            root=root,
+            depth=depth,
+        )
+
     return mcp
 
 
