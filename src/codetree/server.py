@@ -618,6 +618,51 @@ def create_server(root: str) -> FastMCP:
             depth=depth,
         )
 
+    # ── Dataflow & taint analysis tools ──────────────────────────────────────
+
+    @mcp.tool()
+    def get_dataflow(file_path: str, function_name: str) -> dict:
+        """Get intra-function variable dataflow analysis.
+
+        Traces how data flows through variable assignments within a function.
+        Shows dependency chains, external sources, and dangerous sinks.
+
+        Args:
+            file_path: path relative to the repo root
+            function_name: name of the function to analyze
+        """
+        from .graph.dataflow import extract_dataflow
+
+        entry = indexer._index.get(file_path)
+        if entry is None:
+            return {"error": f"File not found: {file_path}"}
+        result = extract_dataflow(entry.plugin, entry.source, function_name)
+        if result is None:
+            return {"error": f"Function '{function_name}' not found in {file_path}"}
+        return result
+
+    @mcp.tool()
+    def get_taint_paths(file_path: str, function_name: str) -> dict:
+        """Analyze security taint paths from untrusted sources to dangerous sinks.
+
+        Traces whether user input (request data, env vars, file reads) reaches
+        sensitive operations (SQL queries, shell commands, eval) without passing
+        through a sanitizer.
+
+        Args:
+            file_path: path relative to the repo root
+            function_name: name of the function to analyze
+        """
+        from .graph.dataflow import extract_taint_paths
+
+        entry = indexer._index.get(file_path)
+        if entry is None:
+            return {"error": f"File not found: {file_path}"}
+        result = extract_taint_paths(entry.plugin, entry.source, function_name)
+        if result is None:
+            return {"error": f"Function '{function_name}' not found in {file_path}"}
+        return result
+
     return mcp
 
 
