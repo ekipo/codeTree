@@ -73,3 +73,21 @@ class TestResolveSymbol:
         fn = _tool(mcp_with_graph, "resolve_symbol")
         result = fn(query="nonexistent_xyz")
         assert len(result["matches"]) == 0
+
+
+class TestSearchGraph:
+    def test_search_by_query(self, mcp_with_graph):
+        fn = _tool(mcp_with_graph, "search_graph")
+        result = fn(query="add")
+        assert result["total"] > 0
+
+    def test_search_by_kind(self, mcp_with_graph):
+        fn = _tool(mcp_with_graph, "search_graph")
+        result = fn(kind="class")
+        assert all(r["kind"] == "class" for r in result["results"])
+
+    def test_pagination(self, mcp_with_graph):
+        fn = _tool(mcp_with_graph, "search_graph")
+        result = fn(limit=1)
+        assert len(result["results"]) <= 1
+        assert "has_more" in result

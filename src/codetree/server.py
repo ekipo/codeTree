@@ -575,6 +575,31 @@ def create_server(root: str) -> FastMCP:
         }
 
     @mcp.tool()
+    def search_graph(query: str | None = None, kind: str | None = None,
+                     file_pattern: str | None = None, relationship: str | None = None,
+                     direction: str | None = None, min_degree: int | None = None,
+                     max_degree: int | None = None, limit: int = 10, offset: int = 0) -> dict:
+        """Search the code graph with flexible filters and pagination.
+
+        Args:
+            query: case-insensitive substring match on symbol name
+            kind: exact type filter (function, class, method, struct, etc.)
+            file_pattern: substring match on file path
+            relationship: edge type filter (CALLS, IMPORTS, CONTAINS)
+            direction: "inbound" or "outbound" (used with relationship)
+            min_degree: minimum total connections
+            max_degree: maximum total connections (0 = isolated/dead code)
+            limit: max results per page (default 10)
+            offset: pagination offset (default 0)
+        """
+        return graph_queries.search_graph(
+            query=query, kind=kind, file_pattern=file_pattern,
+            relationship=relationship, direction=direction,
+            min_degree=min_degree, max_degree=max_degree,
+            limit=limit, offset=offset,
+        )
+
+    @mcp.tool()
     def get_change_impact(symbol_query: str | None = None,
                           diff_scope: str | None = None, depth: int = 3) -> dict:
         """Analyze impact of a change — by explicit symbol or git diff.
