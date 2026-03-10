@@ -45,6 +45,17 @@ def create_server(root: str) -> FastMCP:
         })
     cache.save()
 
+    # ── Build persistent graph ───────────────────────────────────────────
+    from .graph.store import GraphStore
+    from .graph.builder import GraphBuilder
+    from .graph.queries import GraphQueries
+
+    graph_store = GraphStore(root)
+    graph_store.open()
+    graph_builder = GraphBuilder(root, graph_store)
+    graph_builder.build()
+    graph_queries = GraphQueries(graph_store)
+
     # ── Skeleton formatting helpers ──────────────────────────────────────────
     _TYPE_ABBREV = {
         "class": "cls", "struct": "str", "interface": "ifc",
@@ -507,6 +518,61 @@ def create_server(root: str) -> FastMCP:
         scope = f" in {file_path}" if file_path else ""
         lines.append(f"\nTop {len(ranked)} symbols{scope} by reference-based importance")
         return "\n".join(lines)
+
+    # ── Graph-backed onboarding tools ────────────────────────────────────────
+
+    @mcp.tool()
+    def index_status() -> dict:
+        """Report on graph index freshness and stats."""
+        stats = graph_store.stats()
+        last = graph_store.get_meta("last_indexed_at")
+        return {
+            "graph_exists": True,
+            **stats,
+            "last_indexed_at": last,
+        }
+
+    @mcp.tool()
+    def get_repository_map(max_items: int = 5) -> dict:
+        """Get a compact overview of the repository for onboarding.
+
+        Returns languages, entry points, hotspots, recommended start_here symbols,
+        and stats — everything an agent needs to orient in an unfamiliar repo.
+
+        Args:
+            max_items: maximum items per section (default 5)
+        """
+        return graph_queries.repository_map(max_items=max_items)
+
+    @mcp.tool()
+    def resolve_symbol(query: str, kind: str | None = None,
+                       path_hint: str | None = None, limit: int = 10) -> dict:
+        """Disambiguate a short symbol name into ranked qualified matches.
+
+        Resolves ambiguous names like 'add' to specific qualified symbols
+        ranked by relevance (path match, non-test preference, centrality).
+
+        Args:
+            query: symbol name to resolve
+            kind: filter by type (function, class, method, etc.)
+            path_hint: prefer results from files matching this path
+            limit: max results (default 10)
+        """
+        results = graph_queries.resolve_symbol(query, kind=kind, path_hint=path_hint, limit=limit)
+        return {
+            "query": query,
+            "matches": [
+                {
+                    "qualified_name": r.qualified_name,
+                    "name": r.name,
+                    "kind": r.kind,
+                    "file": r.file_path,
+                    "line": r.start_line,
+                    "is_test": r.is_test,
+                }
+                for r in results
+            ],
+        }
 
     return mcp
 
