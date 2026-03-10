@@ -126,6 +126,17 @@ class TestGraphBuilder:
         assert store.get_file("main.py") is None
         store.close()
 
+    def test_tests_edges_created(self, repo_dir):
+        store = GraphStore(str(repo_dir))
+        store.open()
+        builder = GraphBuilder(str(repo_dir), store)
+        builder.build()
+        # test_add should have TESTS edge to calc.py::Calculator.add
+        edges = store.edges_from("test_calc.py::test_add", edge_type="TESTS")
+        target_names = {e.target_qn for e in edges}
+        assert "calc.py::Calculator.add" in target_names
+        store.close()
+
     def test_test_file_detected(self, repo_dir):
         store = GraphStore(str(repo_dir))
         store.open()
@@ -137,4 +148,145 @@ class TestGraphBuilder:
         sym = store.get_symbol("test_calc.py::test_add")
         assert sym is not None
         assert sym.is_test is True
+        store.close()
+
+
+# ─── Type-aware call resolution tests ───────────────────────────────────────
+
+@pytest.fixture
+def multi_module_repo():
+    """Repo with same-named functions in different modules to test disambiguation."""
+    with tempfile.TemporaryDirectory() as tmp:
+        p = Path(tmp)
+        (p / "utils.py").write_text(
+            'def save(data):\n'
+            '    """Save to file."""\n'
+            '    pass\n'
+        )
+        (p / "db.py").write_text(
+            'def save(record):\n'
+            '    """Save to database."""\n'
+            '    pass\n'
+        )
+        (p / "main.py").write_text(
+            'from db import save\n'
+            'def process():\n'
+            '    save({"key": "value"})\n'
+        )
+        (p / "other.py").write_text(
+            'def process():\n'
+            '    save({"key": "value"})\n'
+        )
+        yield p
+
+
+class TestTypeAwareResolution:
+
+    def test_import_confirmed_edge_has_weight_1(self, multi_module_repo):
+        """When caller imports callee's module, edge should have weight 1.0."""
+        store = GraphStore(str(multi_module_repo))
+        store.open()
+        builder = GraphBuilder(str(multi_module_repo), store)
+        builder.build()
+        # main.py imports db, so main.py::process -> db.py::save should be weight 1.0
+        edges = store.edges_from("main.py::process", edge_type="CALLS")
+        db_edges = [e for e in edges if "db.py" in e.target_qn]
+        assert len(db_edges) >= 1
+        for e in db_edges:
+            assert e.weight == 1.0
+        store.close()
+
+    def test_import_confirmed_excludes_unimported(self, multi_module_repo):
+        """When import-confirmed candidates exist, unimported ones are excluded."""
+        store = GraphStore(str(multi_module_repo))
+        store.open()
+        builder = GraphBuilder(str(multi_module_repo), store)
+        builder.build()
+        # main.py imports db, so should NOT have edge to utils.py::save
+        edges = store.edges_from("main.py::process", edge_type="CALLS")
+        utils_edges = [e for e in edges if "utils.py" in e.target_qn]
+        assert len(utils_edges) == 0
+        store.close()
+
+    def test_no_import_falls_back_to_name_only(self, multi_module_repo):
+        """When no imports match, all name matches get weight 0.5."""
+        store = GraphStore(str(multi_module_repo))
+        store.open()
+        builder = GraphBuilder(str(multi_module_repo), store)
+        builder.build()
+        # other.py has no imports, so save calls should be name-only (0.5)
+        edges = store.edges_from("other.py::process", edge_type="CALLS")
+        save_edges = [e for e in edges if "save" in e.target_qn]
+        assert len(save_edges) >= 1
+        for e in save_edges:
+            assert e.weight == 0.5
+        store.close()
+
+    def test_same_file_calls_weight_1(self, multi_module_repo):
+        """Calling a function defined in the same file should have weight 1.0."""
+        store = GraphStore(str(multi_module_repo))
+        store.open()
+        # Add a file that calls its own function
+        (multi_module_repo / "self_call.py").write_text(
+            'def helper():\n'
+            '    pass\n'
+            'def caller():\n'
+            '    helper()\n'
+        )
+        builder = GraphBuilder(str(multi_module_repo), store)
+        builder.build()
+        edges = store.edges_from("self_call.py::caller", edge_type="CALLS")
+        helper_edges = [e for e in edges if e.target_qn == "self_call.py::helper"]
+        assert len(helper_edges) == 1
+        assert helper_edges[0].weight == 1.0
+        store.close()
+
+    def test_unresolved_callee_weight(self, multi_module_repo):
+        """Calls to unknown functions should create ?:: edges with weight 0.5."""
+        store = GraphStore(str(multi_module_repo))
+        store.open()
+        (multi_module_repo / "lonely.py").write_text(
+            'def test_func():\n'
+            '    unknown_function()\n'
+        )
+        builder = GraphBuilder(str(multi_module_repo), store)
+        builder.build()
+        edges = store.edges_from("lonely.py::test_func", edge_type="CALLS")
+        unresolved = [e for e in edges if e.target_qn.startswith("?::")]
+        assert len(unresolved) == 1
+        assert unresolved[0].weight == 0.5
+        store.close()
+
+    def test_resolve_callee_method(self):
+        """Test _resolve_callee directly for various scenarios."""
+        with tempfile.TemporaryDirectory() as tmp:
+            p = Path(tmp)
+            (p / "a.py").write_text("def foo(): pass\n")
+            (p / "b.py").write_text("import a\ndef bar(): foo()\n")
+            store = GraphStore(str(p))
+            store.open()
+            builder = GraphBuilder(str(p), store)
+            builder.build()
+            # After build, verify edges exist
+            edges = store.edges_from("b.py::bar", edge_type="CALLS")
+            foo_edges = [e for e in edges if "foo" in e.target_qn]
+            assert len(foo_edges) >= 1
+            store.close()
+
+    def test_change_impact_min_weight(self, multi_module_repo):
+        """change_impact with min_weight should filter low-confidence callers."""
+        store = GraphStore(str(multi_module_repo))
+        store.open()
+        builder = GraphBuilder(str(multi_module_repo), store)
+        builder.build()
+        from codetree.graph.queries import GraphQueries
+        queries = GraphQueries(store)
+        # With min_weight=0.8, only import-confirmed callers should appear
+        result = queries.change_impact(symbol_query="save", min_weight=0.8)
+        # main.py::process should appear (weight 1.0), other.py::process should not (weight 0.5)
+        all_callers = []
+        for risk_level in result["impact"].values():
+            all_callers.extend(c["qualified_name"] for c in risk_level)
+        if "main.py::process" in all_callers:
+            assert "other.py::process" not in all_callers
         store.close()

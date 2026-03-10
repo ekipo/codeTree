@@ -665,6 +665,162 @@ def create_server(root: str) -> FastMCP:
             return {"error": f"Function '{function_name}' not found in {file_path}"}
         return result
 
+    @mcp.tool()
+    def get_cross_function_taint(file_path: str, function_name: str,
+                                  depth: int = 3) -> dict:
+        """Trace taint paths across function call boundaries.
+
+        When tainted data flows into a function call, follows the argument
+        into the callee to see if it reaches a sink there. Recurses up to
+        `depth` levels deep.
+
+        Args:
+            file_path: path relative to the repo root
+            function_name: name of the entry function to analyze
+            depth: max cross-function depth (default 3)
+        """
+        from .graph.dataflow import extract_cross_function_taint
+
+        if file_path not in indexer._index:
+            return {"error": f"File not found: {file_path}"}
+        return extract_cross_function_taint(indexer, file_path, function_name, depth=depth)
+
+    @mcp.tool()
+    def find_hot_paths(top_n: int = 10) -> str:
+        """Find high-leverage optimization targets by combining complexity and call frequency.
+
+        Returns functions ranked by hot_score = complexity * inbound_call_count.
+        Functions with high scores are called often AND complex — prime optimization targets.
+
+        Args:
+            top_n: max results to return (default 10)
+        """
+        results = graph_queries.find_hot_paths(indexer, top_n=top_n)
+        if not results:
+            return "No hot paths found (no functions with both callers and complexity)."
+        lines = ["Hot path analysis (complexity × call frequency):"]
+        for i, r in enumerate(results, 1):
+            lines.append(
+                f"  {i}. {r['file']}: {r['name']}() → line {r['line']}  "
+                f"(score={r['hot_score']}, complexity={r['complexity']}, calls={r['inbound_calls']})"
+            )
+        lines.append(f"\nTop {len(results)} optimization targets")
+        return "\n".join(lines)
+
+    @mcp.tool()
+    def get_dependency_graph(file_path: str | None = None,
+                              format: str = "mermaid") -> str:
+        """Get the file dependency graph as Mermaid syntax or a list.
+
+        Shows which files import which other files, useful for understanding
+        module structure and identifying circular dependencies.
+
+        Args:
+            file_path: optional — show only dependencies involving this file
+            format: "mermaid" (default, Mermaid.js flowchart) or "list"
+        """
+        result = graph_queries.get_dependency_graph(file_path=file_path, format=format)
+        summary = f"\n\n{result['nodes']} files, {result['edges']} import edges"
+        return result["content"] + summary
+
+    @mcp.tool()
+    def get_blame(file_path: str) -> str:
+        """Get per-line git blame info showing who wrote each line.
+
+        Returns author summary and per-line attribution.
+
+        Args:
+            file_path: path relative to the repo root
+        """
+        from .graph.git_analysis import get_blame as _get_blame
+
+        result = _get_blame(root, file_path)
+        if not result["lines"]:
+            return f"No blame data for {file_path} (file not in git or no commits)."
+        lines = [f"Blame for {file_path}:"]
+        lines.append(f"\nAuthors:")
+        for author, count in result["summary"]["authors"].items():
+            lines.append(f"  {author}: {count} lines")
+        lines.append(f"\nTotal: {result['summary']['total_lines']} lines")
+        return "\n".join(lines)
+
+    @mcp.tool()
+    def get_churn(top_n: int = 20, since: str | None = None) -> str:
+        """Get most frequently changed files in git history.
+
+        High-churn files are change hotspots — often where bugs live.
+
+        Args:
+            top_n: max results (default 20)
+            since: optional date filter (e.g., "6 months ago", "2024-01-01")
+        """
+        from .graph.git_analysis import get_churn as _get_churn
+
+        results = _get_churn(root, top_n=top_n, since=since)
+        if not results:
+            return "No churn data found (no git history or no matching files)."
+        lines = ["File churn (most changed files):"]
+        for i, r in enumerate(results, 1):
+            lines.append(
+                f"  {i}. {r['file']}  ({r['commits']} commits, "
+                f"+{r['additions']}/-{r['deletions']})"
+            )
+        lines.append(f"\nTop {len(results)} most-changed files")
+        return "\n".join(lines)
+
+    @mcp.tool()
+    def get_change_coupling(file_path: str | None = None,
+                             top_n: int = 10, min_commits: int = 3) -> str:
+        """Find files that frequently change together (temporal coupling).
+
+        Files with high coupling may have hidden dependencies or should be
+        refactored to reduce coupling.
+
+        Args:
+            file_path: optional — show coupling for this file only
+            top_n: max results (default 10)
+            min_commits: minimum co-change count to report (default 3)
+        """
+        from .graph.git_analysis import get_change_coupling as _get_change_coupling
+
+        results = _get_change_coupling(root, file_path=file_path, top_n=top_n, min_commits=min_commits)
+        if not results:
+            return "No change coupling found (not enough co-changing files)."
+        lines = ["Change coupling (files that change together):"]
+        for r in results:
+            lines.append(
+                f"  {r['file_a']} ↔ {r['file_b']}  "
+                f"({r['co_commits']} co-commits, coupling={r['coupling_ratio']})"
+            )
+        lines.append(f"\n{len(results)} coupled file pairs")
+        return "\n".join(lines)
+
+    @mcp.tool()
+    def suggest_docs(file_path: str | None = None,
+                     symbol_name: str | None = None) -> str:
+        """Find undocumented functions and assemble context for writing docs.
+
+        Args:
+            file_path: optional — scope to a specific file
+            symbol_name: optional — scope to a specific symbol name
+        """
+        results = graph_queries.suggest_docs(indexer, file_path=file_path, symbol_name=symbol_name)
+        if not results:
+            return "No undocumented functions found."
+        lines = ["Undocumented functions needing docs:"]
+        for r in results:
+            parent_str = f" (in {r['parent']})" if r.get("parent") else ""
+            lines.append(f"\n  {r['file']}:{r['line']} — {r['name']}({r['params']}){parent_str}")
+            if r["callees"]:
+                lines.append(f"    Calls: {', '.join(r['callees'])}")
+            if r["callers"]:
+                lines.append(f"    Called by: {', '.join(r['callers'])}")
+            if r["variables"]:
+                var_strs = [f"{v['name']}: {v['type']}" if v['type'] else v['name'] for v in r["variables"]]
+                lines.append(f"    Variables: {', '.join(var_strs)}")
+        lines.append(f"\n{len(results)} undocumented functions found")
+        return "\n".join(lines)
+
     return mcp
 
 

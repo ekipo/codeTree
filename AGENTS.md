@@ -6,7 +6,7 @@ This file provides guidance to Codex (Codex.ai/code) when working with code in t
 
 codetree is a Python MCP (Model Context Protocol) server that gives coding agents structured code understanding via tree-sitter. Instead of reading entire files, an agent can ask "what classes are in this file?" or "what does this function call?" and get precise, structured answers.
 
-It exposes **23 tools** over MCP:
+It exposes **30 tools** over MCP:
 
 | Tool | Purpose | Returns |
 |------|---------|---------|
@@ -33,6 +33,13 @@ It exposes **23 tools** over MCP:
 | `get_change_impact(symbol_query?, diff_scope?)` | Impact analysis via symbol or git diff | `{impact: {CRITICAL: [...], HIGH: [...]}}` |
 | `get_dataflow(file_path, function_name)` | Intra-function variable dataflow tracing | `{variables: [...], flow_chains: [...]}` |
 | `get_taint_paths(file_path, function_name)` | Security taint analysis: sources to sinks | `{paths: [{verdict: "UNSAFE", risk: "SQL injection"}]}` |
+| `get_cross_function_taint(file_path, function_name, depth?)` | Cross-file taint tracing through call boundaries | `{taint_paths: [{chain, verdict}]}` |
+| `find_hot_paths(top_n?)` | High-complexity × high-call-count optimization targets | `file:line — name (complexity=N, callers=M)` |
+| `get_dependency_graph(file_path?, format?)` | File-level dependency graph as Mermaid or list | `graph LR\n  main.py --> calc.py` |
+| `get_blame(file_path)` | Per-line git blame with author summary | `line 1: author (commit, date) code` |
+| `get_churn(top_n?, since?)` | Most-changed files by commit count | `file (N commits, +A/-D lines)` |
+| `get_change_coupling(file_path?, top_n?, min_commits?)` | Files that change together (temporal coupling) | `a.py ↔ b.py (N co-commits, ratio=0.8)` |
+| `suggest_docs(file_path?, symbol_name?)` | Find undocumented functions with context for doc generation | `file:line — name(params), calls: [...]` |
 
 `get_file_skeleton` also warns about syntax errors (`WARNING: File has syntax errors — skeleton may be incomplete`).
 
@@ -59,7 +66,7 @@ All `file_path` arguments are **relative to the repo root** (e.g., `"src/main.py
 # Activate venv (required before all commands)
 source .venv/bin/activate
 
-# Run all tests (999 tests, ~30s)
+# Run all tests (~1070 tests, ~35s)
 pytest
 
 # Run a single test file
@@ -90,7 +97,7 @@ MCP tool call → server.py → indexer.py → FileEntry.plugin → tree-sitter 
 
 | File | Responsibility |
 |---|---|
-| `server.py` | FastMCP 3.1.0 server — defines all 23 tools, wires cache + indexer + graph at startup. Language-unaware. |
+| `server.py` | FastMCP 3.1.0 server — defines all 30 tools, wires cache + indexer + graph at startup. Language-unaware. |
 | `indexer.py` | Discovers files, stores a `FileEntry` per file (with its plugin + `has_errors` flag), routes all queries through the stored plugin. Builds a definition index and lazy call graph for dead code, blast radius, and clone detection. Skips `.venv`, `node_modules`, `__pycache__`, `.git`, etc. |
 | `cache.py` | `.codetree/index.json` — stores pre-computed skeletons with mtime-based invalidation. Language-unaware. |
 | `registry.py` | Maps file extensions → plugin instances. The **only** place languages are registered. |
@@ -101,9 +108,10 @@ MCP tool call → server.py → indexer.py → FileEntry.plugin → tree-sitter 
 |---|---|
 | `models.py` | `SymbolNode`, `Edge` dataclasses, `make_qualified_name()` |
 | `store.py` | SQLite persistence (`.codetree/graph.db`) — symbols, edges, files tables with WAL mode |
-| `builder.py` | Incremental graph builder — sha256 change detection, two-pass edge resolution |
-| `queries.py` | Repository map, symbol resolution, graph search, change impact analysis |
-| `dataflow.py` | Intra-function dataflow tracing and taint path analysis |
+| `builder.py` | Incremental graph builder — sha256 change detection, import-aware call resolution with edge weights |
+| `queries.py` | Repository map, symbol resolution, graph search, change impact, hot paths, dependency graph, doc suggestions |
+| `dataflow.py` | Intra- and cross-function dataflow tracing and taint path analysis |
+| `git_analysis.py` | Git blame, churn, change coupling analysis |
 
 ### Plugin system (`src/codetree/languages/`)
 
@@ -202,3 +210,4 @@ The tree-sitter Python bindings have breaking changes from older docs:
 - Skeleton results are deduplicated by `(name, line)` and sorted by line number
 - Indexer `SKIP_DIRS` includes `.venv`, `node_modules`, `__pycache__`, `.git` — without this, crawling `.venv` causes Codex timeout
 - FastMCP tool access in tests: `mcp.local_provider._components[f"tool:{name}@"].fn`
+- **Doc sync rule**: When tools are added, removed, or changed, update all 5 doc files: `README.md`, `TOOLS_GUIDE.md`, `LANDING_PAGE.md`, `CLAUDE.md`, `AGENTS.md`

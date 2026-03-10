@@ -319,6 +319,99 @@ class RubyPlugin(LanguagePlugin):
     def _get_language(self):
         return _LANGUAGE
 
+    def extract_variables(self, source: bytes, fn_name: str) -> list[dict]:
+        tree = _parse(source)
+
+        # Find method node (instance, singleton, or top-level)
+        fn_node = None
+        for q_str in [
+            "(method name: (identifier) @name) @def",
+            "(singleton_method name: (identifier) @name) @def",
+        ]:
+            for _, m in _matches(Query(_LANGUAGE, q_str), tree.root_node):
+                if m["name"].text.decode("utf-8", errors="replace") == fn_name:
+                    fn_node = m["def"]
+                    break
+            if fn_node:
+                break
+        if fn_node is None:
+            return []
+
+        results = []
+        seen = set()
+
+        def _add(name, line, var_type="", kind="local"):
+            if name not in seen:
+                seen.add(name)
+                results.append({"name": name, "line": line, "type": var_type, "kind": kind})
+
+        # Extract parameters from method_parameters
+        for child in fn_node.children:
+            if child.type == "method_parameters":
+                for param in child.children:
+                    if param.type == "identifier":
+                        _add(param.text.decode("utf-8", errors="replace"),
+                             param.start_point[0] + 1, kind="parameter")
+                    elif param.type == "optional_parameter":
+                        for sub in param.children:
+                            if sub.type == "identifier":
+                                _add(sub.text.decode("utf-8", errors="replace"),
+                                     sub.start_point[0] + 1, kind="parameter")
+                                break
+                    elif param.type == "splat_parameter":
+                        for sub in param.children:
+                            if sub.type == "identifier":
+                                _add(sub.text.decode("utf-8", errors="replace"),
+                                     sub.start_point[0] + 1, kind="parameter")
+                                break
+                    elif param.type == "hash_splat_parameter":
+                        for sub in param.children:
+                            if sub.type == "identifier":
+                                _add(sub.text.decode("utf-8", errors="replace"),
+                                     sub.start_point[0] + 1, kind="parameter")
+                                break
+                    elif param.type == "keyword_parameter":
+                        for sub in param.children:
+                            if sub.type == "identifier":
+                                _add(sub.text.decode("utf-8", errors="replace"),
+                                     sub.start_point[0] + 1, kind="parameter")
+                                break
+                break
+
+        # Walk the method body for local assignments and block params
+        def walk(node):
+            if node.type == "assignment":
+                # x = expr — LHS is first child
+                lhs = node.children[0] if node.children else None
+                if lhs and lhs.type == "identifier":
+                    _add(lhs.text.decode("utf-8", errors="replace"),
+                         lhs.start_point[0] + 1)
+            elif node.type == "for":
+                # for item in collection — pattern is the loop variable
+                for child in node.children:
+                    if child.type == "identifier":
+                        _add(child.text.decode("utf-8", errors="replace"),
+                             child.start_point[0] + 1, kind="loop_var")
+                        break
+            elif node.type == "block_parameters":
+                # |x, y| in blocks
+                for child in node.children:
+                    if child.type == "identifier":
+                        _add(child.text.decode("utf-8", errors="replace"),
+                             child.start_point[0] + 1, kind="loop_var")
+            for child in node.children:
+                walk(child)
+
+        # Walk the body_statement (or direct children if no body_statement)
+        for child in fn_node.children:
+            if child.type == "body_statement":
+                walk(child)
+                break
+            elif child.type not in ("identifier", "method_parameters", "end"):
+                walk(child)
+
+        return results
+
     def compute_complexity(self, source: bytes, fn_name: str) -> dict | None:
         tree = _parse(source)
         fn_node = None

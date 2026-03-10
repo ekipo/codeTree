@@ -128,8 +128,8 @@ class CppPlugin(CPlugin):
         lang = _LANGUAGE
         tree = _parse(source)
 
-        # Functions (including namespace-scoped)
-        q = Query(lang, "(function_definition declarator: (function_declarator declarator: (identifier) @name)) @def")
+        # Functions — check both identifier (top-level) and field_identifier (class methods)
+        q = Query(lang, "(function_definition declarator: (function_declarator declarator: [(identifier) @name (field_identifier) @name])) @def")
         for _, m in _matches(q, tree.root_node):
             if m["name"].text.decode("utf-8", errors="replace") == name:
                 node = m["def"]
@@ -212,6 +212,127 @@ class CppPlugin(CPlugin):
 
     def check_syntax(self, source: bytes) -> bool:
         return _parse(source).root_node.has_error
+
+    def extract_variables(self, source: bytes, fn_name: str) -> list[dict]:
+        tree = _parse(source)
+
+        # Find function node — check both identifier (top-level) and field_identifier (class methods)
+        fn_node = None
+        q = Query(_LANGUAGE, "(function_definition declarator: (function_declarator declarator: [(identifier) @name (field_identifier) @name])) @def")
+        for _, m in _matches(q, tree.root_node):
+            if m["name"].text.decode("utf-8", errors="replace") == fn_name:
+                fn_node = m["def"]
+                break
+        if fn_node is None:
+            return []
+
+        results = []
+        seen = set()
+
+        def _add(name, line, var_type="", kind="local"):
+            if name not in seen:
+                seen.add(name)
+                results.append({"name": name, "line": line, "type": var_type, "kind": kind})
+
+        # Extract parameters from parameter_list
+        for child in fn_node.children:
+            if child.type == "function_declarator":
+                for sub in child.children:
+                    if sub.type == "parameter_list":
+                        for param in sub.children:
+                            if param.type == "parameter_declaration":
+                                id_node = None
+                                type_parts = []
+                                for pc in param.children:
+                                    if pc.type == "identifier":
+                                        id_node = pc
+                                    elif pc.type == "pointer_declarator":
+                                        for ppc in pc.children:
+                                            if ppc.type == "identifier":
+                                                id_node = ppc
+                                    elif pc.type == "reference_declarator":
+                                        for ppc in pc.children:
+                                            if ppc.type == "identifier":
+                                                id_node = ppc
+                                    elif pc.type not in (",", "(", ")"):
+                                        type_parts.append(pc.text.decode("utf-8", errors="replace"))
+                                if id_node:
+                                    _add(id_node.text.decode("utf-8", errors="replace"),
+                                         id_node.start_point[0] + 1,
+                                         var_type=" ".join(type_parts), kind="parameter")
+                break
+
+        # Walk the function body
+        def walk(node):
+            if node.type == "declaration":
+                type_text = ""
+                for child in node.children:
+                    if child.type in ("primitive_type", "type_identifier", "sized_type_specifier",
+                                      "template_type", "auto"):
+                        type_text = child.text.decode("utf-8", errors="replace")
+                        break
+                for child in node.children:
+                    if child.type == "init_declarator":
+                        for sub in child.children:
+                            if sub.type == "identifier":
+                                _add(sub.text.decode("utf-8", errors="replace"),
+                                     sub.start_point[0] + 1, var_type=type_text)
+                                break
+                            elif sub.type == "reference_declarator":
+                                for ppc in sub.children:
+                                    if ppc.type == "identifier":
+                                        _add(ppc.text.decode("utf-8", errors="replace"),
+                                             ppc.start_point[0] + 1, var_type=type_text)
+                                        break
+                                break
+                        break
+                    elif child.type == "identifier":
+                        _add(child.text.decode("utf-8", errors="replace"),
+                             child.start_point[0] + 1, var_type=type_text)
+            elif node.type == "for_range_loop":
+                # for (auto& item : collection)
+                type_text = ""
+                id_node = None
+                for child in node.children:
+                    if child.type in ("primitive_type", "type_identifier", "auto",
+                                      "placeholder_type_specifier"):
+                        type_text = child.text.decode("utf-8", errors="replace")
+                    elif child.type == "identifier" and type_text and id_node is None:
+                        id_node = child
+                    elif child.type == "reference_declarator" and id_node is None:
+                        for sub in child.children:
+                            if sub.type == "identifier":
+                                id_node = sub
+                                break
+                if id_node:
+                    _add(id_node.text.decode("utf-8", errors="replace"),
+                         id_node.start_point[0] + 1, var_type=type_text, kind="loop_var")
+            elif node.type == "for_statement":
+                for child in node.children:
+                    if child.type == "declaration":
+                        type_text = ""
+                        for sub in child.children:
+                            if sub.type in ("primitive_type", "type_identifier", "sized_type_specifier"):
+                                type_text = sub.text.decode("utf-8", errors="replace")
+                                break
+                        for sub in child.children:
+                            if sub.type == "init_declarator":
+                                for ssub in sub.children:
+                                    if ssub.type == "identifier":
+                                        _add(ssub.text.decode("utf-8", errors="replace"),
+                                             ssub.start_point[0] + 1, var_type=type_text, kind="loop_var")
+                                        break
+                                break
+                        break
+            for child in node.children:
+                walk(child)
+
+        for child in fn_node.children:
+            if child.type == "compound_statement":
+                walk(child)
+                break
+
+        return results
 
     def compute_complexity(self, source: bytes, fn_name: str) -> dict | None:
         tree = _parse(source)

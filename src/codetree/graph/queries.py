@@ -201,7 +201,8 @@ class GraphQueries:
 
     def change_impact(self, symbol_query: str | None = None,
                       diff_scope: str | None = None,
-                      root: str | None = None, depth: int = 3) -> dict:
+                      root: str | None = None, depth: int = 3,
+                      min_weight: float = 0.0) -> dict:
         """Analyze impact of a change — by explicit symbol or git diff."""
         changed_qns = []
 
@@ -235,6 +236,8 @@ class GraphQueries:
             for edge in callers:
                 caller_qn = edge.source_qn
                 if caller_qn in visited or caller_qn.startswith("?::"):
+                    continue
+                if edge.weight < min_weight:
                     continue
                 visited.add(caller_qn)
                 hop = current_depth + 1
@@ -303,3 +306,181 @@ class GraphQueries:
             syms = self._store.symbols_by_file(fp)
             changed_qns.extend(s.qualified_name for s in syms if not s.is_test)
         return changed_qns
+
+    def find_hot_paths(self, indexer, top_n: int = 10) -> list[dict]:
+        """Find high-leverage optimization targets: complexity x inbound call count.
+
+        Args:
+            indexer: Indexer instance for computing complexity
+            top_n: max results to return
+
+        Returns list of dicts with qualified_name, name, file, line, complexity,
+        inbound_calls, and hot_score (complexity * inbound_calls).
+        """
+        conn = self._store
+
+        # Get all non-test functions/methods with inbound CALLS edges
+        cur = conn.execute(
+            "SELECT s.qualified_name, s.name, s.kind, s.file_path, s.start_line "
+            "FROM symbols s WHERE s.is_test = 0 AND s.kind IN ('function', 'method')"
+        )
+        candidates = cur.fetchall()
+
+        results = []
+        for qn, name, kind, file_path, start_line in candidates:
+            # Count inbound CALLS edges
+            inbound = self._store.edges_to(qn, edge_type="CALLS")
+            call_count = len(inbound)
+            if call_count == 0:
+                continue
+
+            # Compute complexity
+            entry = indexer._index.get(file_path)
+            if entry is None:
+                continue
+            complexity_result = entry.plugin.compute_complexity(entry.source, name)
+            complexity = complexity_result["total"] if complexity_result else 1
+
+            hot_score = complexity * call_count
+            results.append({
+                "qualified_name": qn,
+                "name": name,
+                "file": file_path,
+                "line": start_line,
+                "complexity": complexity,
+                "inbound_calls": call_count,
+                "hot_score": hot_score,
+            })
+
+        results.sort(key=lambda x: x["hot_score"], reverse=True)
+        return results[:top_n]
+
+    def suggest_docs(self, indexer, file_path: str | None = None,
+                     symbol_name: str | None = None) -> list[dict]:
+        """Find undocumented functions and assemble context for doc generation.
+
+        Args:
+            indexer: Indexer instance
+            file_path: optional — scope to this file
+            symbol_name: optional — scope to this symbol
+
+        Returns list of dicts with symbol info plus context (callers, callees, variables, params).
+        """
+        results = []
+
+        # Gather candidates from indexer
+        if file_path:
+            files = {file_path: indexer._index.get(file_path)} if file_path in indexer._index else {}
+        else:
+            files = dict(indexer._index)
+
+        for fp, entry in files.items():
+            if entry is None:
+                continue
+            for item in entry.skeleton:
+                if item["type"] not in ("function", "method"):
+                    continue
+                if symbol_name and item["name"] != symbol_name:
+                    continue
+                # Skip already-documented symbols
+                if item.get("doc", "").strip():
+                    continue
+
+                name = item["name"]
+                # Skip test functions and private helpers
+                if name.startswith("test_") or name.startswith("_"):
+                    continue
+
+                # Assemble context
+                params = item.get("params", "")
+                callees = entry.plugin.extract_calls_in_function(entry.source, name)
+                variables = entry.plugin.extract_variables(entry.source, name)
+
+                # Get callers from graph
+                qn = f"{fp}::{name}"
+                if item.get("parent"):
+                    qn = f"{fp}::{item['parent']}.{name}"
+                callers = []
+                edges = self._store.edges_to(qn, edge_type="CALLS")
+                for e in edges:
+                    sym = self._store.get_symbol(e.source_qn)
+                    if sym:
+                        callers.append(f"{sym.file_path}::{sym.name}")
+
+                results.append({
+                    "qualified_name": qn,
+                    "name": name,
+                    "file": fp,
+                    "line": item["line"],
+                    "parent": item.get("parent"),
+                    "params": params,
+                    "callees": callees,
+                    "callers": callers,
+                    "variables": [{"name": v["name"], "type": v.get("type", "")} for v in variables],
+                })
+
+        return results
+
+    def get_dependency_graph(self, file_path: str | None = None,
+                              format: str = "mermaid") -> dict:
+        """Generate a dependency graph from IMPORTS edges.
+
+        Args:
+            file_path: optional — if given, show only dependencies of/to this file
+            format: "mermaid" (default) or "list"
+
+        Returns:
+            {"format": str, "content": str, "nodes": int, "edges": int}
+        """
+        conn = self._store
+
+        # Get all IMPORTS edges
+        if file_path:
+            # Edges from or to this file
+            cur = conn.execute(
+                "SELECT source_qn, target_qn FROM edges "
+                "WHERE type='IMPORTS' AND (source_qn LIKE ? OR target_qn LIKE ?)",
+                (f"{file_path}::%", f"{file_path}::%"),
+            )
+        else:
+            cur = conn.execute(
+                "SELECT source_qn, target_qn FROM edges WHERE type='IMPORTS'"
+            )
+
+        raw_edges = cur.fetchall()
+        if not raw_edges:
+            return {"format": format, "content": "No import dependencies found.", "nodes": 0, "edges": 0}
+
+        # Extract file names from qualified names (file::__file__)
+        edges = []
+        nodes = set()
+        for src_qn, tgt_qn in raw_edges:
+            src_file = src_qn.split("::")[0]
+            tgt_file = tgt_qn.split("::")[0]
+            nodes.add(src_file)
+            nodes.add(tgt_file)
+            edges.append((src_file, tgt_file))
+
+        if format == "mermaid":
+            lines = ["graph LR"]
+            # Create safe node IDs (replace dots/slashes)
+            node_ids = {}
+            for i, n in enumerate(sorted(nodes)):
+                safe_id = f"n{i}"
+                node_ids[n] = safe_id
+                lines.append(f'    {safe_id}["{n}"]')
+            for src, tgt in edges:
+                lines.append(f"    {node_ids[src]} --> {node_ids[tgt]}")
+            content = "\n".join(lines)
+        else:
+            lines = ["Dependencies:"]
+            for src, tgt in sorted(edges):
+                lines.append(f"  {src} → {tgt}")
+            content = "\n".join(lines)
+
+        return {
+            "format": format,
+            "content": content,
+            "nodes": len(nodes),
+            "edges": len(edges),
+        }

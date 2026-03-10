@@ -10,6 +10,7 @@ class GraphBuilder:
     def __init__(self, root: str, store: GraphStore):
         self._root = Path(root)
         self._store = store
+        self._file_imports: dict[str, set[str]] = {}  # file → set of imported module stems/symbols
 
     def _hash_file(self, path: Path) -> str:
         return hashlib.sha256(path.read_bytes()).hexdigest()
@@ -112,25 +113,24 @@ class GraphBuilder:
             changed_files.append((rel_path, info))
 
         # ── Pass 2: Build CALLS and IMPORTS edges (all symbols now in store) ──
+        # First, parse imports for all changed files to enable type-aware resolution
+        for rel_path, info in changed_files:
+            entry = info["entry"]
+            self._file_imports[rel_path] = self._parse_file_imports(entry, current_files)
+
         for rel_path, info in changed_files:
             entry = info["entry"]
 
-            # Build CALLS edges
+            # Build CALLS edges with type-aware resolution
             for item in entry.skeleton:
                 if item["type"] not in ("function", "method"):
                     continue
                 caller_qn = make_qualified_name(rel_path, item["name"], item.get("parent"))
                 callees = entry.plugin.extract_calls_in_function(entry.source, item["name"])
                 for callee_name in callees:
-                    # Resolve callee to definition(s) — all symbols are in store now
-                    targets = self._store.symbols_by_name(callee_name)
-                    if targets:
-                        for t in targets:
-                            self._store.upsert_edge(Edge(caller_qn, t.qualified_name, "CALLS"))
-                            edges_created += 1
-                    else:
-                        # Unresolved — store with ? prefix
-                        self._store.upsert_edge(Edge(caller_qn, f"?::{callee_name}", "CALLS"))
+                    resolved = self._resolve_callee(rel_path, callee_name)
+                    for target_qn, weight in resolved:
+                        self._store.upsert_edge(Edge(caller_qn, target_qn, "CALLS", weight=weight))
                         edges_created += 1
 
             # Build IMPORTS edges
@@ -191,3 +191,66 @@ class GraphBuilder:
             "symbols_created": symbols_created,
             "edges_created": edges_created,
         }
+
+    def _parse_file_imports(self, entry, current_files: dict) -> set[str]:
+        """Extract imported module stems and symbol names from a file's imports."""
+        imported = set()
+        imports = entry.plugin.extract_imports(entry.source)
+        for imp in imports:
+            text = imp["text"]
+            parts = text.split()
+            # Python: "import foo", "from foo import bar, baz"
+            # JS/TS: "import { bar } from 'foo'"
+            # Go: "import \"foo\""
+            # C/C++: "#include <foo.h>", "#include \"foo.h\""
+            # Ruby: "require 'foo'"
+            for part in parts:
+                # Strip punctuation: quotes, braces, angle brackets, semicolons
+                cleaned = part.strip("\"'<>;{}()")
+                if cleaned and not cleaned.startswith(("#", "//")) and cleaned not in (
+                    "import", "from", "require", "require_relative", "include", "using",
+                    "as", "*", ",",
+                ):
+                    # Add the stem (e.g., "foo" from "foo.py" or "foo/bar")
+                    stem = Path(cleaned).stem
+                    imported.add(stem)
+                    imported.add(cleaned)
+                    # Also add individual path components
+                    for component in Path(cleaned).parts:
+                        imported.add(component)
+        # Also record stems of files that this file imports
+        for candidate in current_files:
+            stem = Path(candidate).stem
+            if stem in imported:
+                imported.add(candidate)
+        return imported
+
+    def _resolve_callee(self, caller_file: str, callee_name: str) -> list[tuple[str, float]]:
+        """Resolve a callee name to qualified names with import-aware weighting.
+
+        Returns list of (qualified_name, weight) tuples.
+        Weight 1.0 = import-confirmed, 0.5 = name-only match.
+        """
+        targets = self._store.symbols_by_name(callee_name)
+        if not targets:
+            return [(f"?::{callee_name}", 0.5)]
+
+        caller_imports = self._file_imports.get(caller_file, set())
+        same_file = []
+        import_confirmed = []
+        name_only = []
+
+        for t in targets:
+            if t.file_path == caller_file:
+                # Same file — always high confidence
+                same_file.append((t.qualified_name, 1.0))
+            elif t.file_path in caller_imports or Path(t.file_path).stem in caller_imports:
+                import_confirmed.append((t.qualified_name, 1.0))
+            else:
+                name_only.append((t.qualified_name, 0.5))
+
+        # If we have import-confirmed or same-file matches, prefer those
+        confirmed = same_file + import_confirmed
+        if confirmed:
+            return confirmed
+        return name_only

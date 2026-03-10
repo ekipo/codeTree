@@ -178,18 +178,156 @@ def extract_taint_paths(plugin: LanguagePlugin, source: bytes, fn_name: str) -> 
     return {"paths": paths}
 
 
+def extract_cross_function_taint(indexer, file_path: str, fn_name: str,
+                                  depth: int = 3) -> dict:
+    """Trace taint paths across function call boundaries.
+
+    When taint hits a function call, follows the argument into the callee
+    to see if it reaches a sink there.
+
+    Args:
+        indexer: Indexer instance with file index
+        file_path: starting file
+        fn_name: starting function name
+        depth: max cross-function depth (default 3)
+
+    Returns:
+        {
+            "entry": "file::function",
+            "paths": [{"verdict", "chain", "functions", "sanitizer", "risk"}],
+            "depth_reached": int,
+        }
+    """
+    entry = indexer._index.get(file_path)
+    if entry is None:
+        return {"entry": f"{file_path}::{fn_name}", "paths": [], "depth_reached": 0}
+
+    all_paths = []
+    visited_fns = set()
+
+    def _trace(fp, fn, current_depth, chain_prefix):
+        """Recursively trace taint through function calls."""
+        if current_depth > depth:
+            return
+        fn_key = f"{fp}::{fn}"
+        if fn_key in visited_fns:
+            return
+        visited_fns.add(fn_key)
+
+        e = indexer._index.get(fp)
+        if e is None:
+            return
+
+        # Get intra-function taint for this function
+        local_taint = extract_taint_paths(e.plugin, e.source, fn)
+        if local_taint is None:
+            return
+
+        # Report any taint paths found at this level
+        for path in local_taint["paths"]:
+            all_paths.append({
+                "verdict": path["verdict"],
+                "chain": chain_prefix + path["chain"],
+                "functions": list(visited_fns),
+                "sanitizer": path["sanitizer"],
+                "risk": path["risk"],
+            })
+
+        # Get dataflow to find calls that receive tainted data
+        flow = extract_dataflow(e.plugin, e.source, fn)
+        if flow is None:
+            return
+
+        # Find variables that come from taint sources
+        tainted_vars = set()
+        for v in flow["variables"]:
+            expr = v.get("source_expr", "")
+            for src in TAINT_SOURCES:
+                if src in expr:
+                    tainted_vars.add(v["name"])
+                    break
+        # Propagate: if a var depends on a tainted var, it's tainted too
+        changed = True
+        while changed:
+            changed = False
+            for v in flow["variables"]:
+                if v["name"] not in tainted_vars:
+                    for dep in v["depends_on"]:
+                        if dep in tainted_vars:
+                            tainted_vars.add(v["name"])
+                            changed = True
+                            break
+
+        # Get callees and check if tainted data flows into them
+        callees = e.plugin.extract_calls_in_function(e.source, fn)
+        for callee_name in callees:
+            # Check if any tainted variable appears in the call arguments
+            # We use a simple heuristic: check if the callee is called with tainted args
+            for v in flow["variables"]:
+                expr = v.get("source_expr", "")
+                if callee_name + "(" in expr:
+                    # This variable's value comes from this callee; not what we want
+                    continue
+            # Check if any tainted var is used in a call to this callee
+            # by looking at the function source for patterns like callee(tainted_var)
+            result = e.plugin.extract_symbol_source(e.source, fn)
+            if result is None:
+                continue
+            fn_src, _ = result
+            # Simple pattern: callee_name(... tainted_var ...)
+            passes_taint = False
+            for tv in tainted_vars:
+                if f"{callee_name}({tv}" in fn_src or f"{callee_name}( {tv}" in fn_src:
+                    passes_taint = True
+                    break
+                # Also check comma-separated args
+                if f", {tv}" in fn_src and callee_name in fn_src:
+                    passes_taint = True
+                    break
+
+            if not passes_taint:
+                continue
+
+            # Find the callee in the repo
+            for cfp, ce in indexer._index.items():
+                for item in ce.skeleton:
+                    if item["name"] == callee_name and item["type"] in ("function", "method"):
+                        _trace(cfp, callee_name, current_depth + 1,
+                               chain_prefix + [f"{fn}() → {callee_name}()"])
+                        break
+
+    _trace(file_path, fn_name, 0, [])
+
+    return {
+        "entry": f"{file_path}::{fn_name}",
+        "paths": all_paths,
+        "depth_reached": len(visited_fns),
+    }
+
+
 def _find_function_body(root, fn_name: str):
     """Find the body node of a function by name."""
     for node in _walk_tree(root):
-        if node.type in ("function_definition", "function_declaration", "method_definition"):
+        if node.type in ("function_definition", "function_declaration", "method_definition",
+                         "method", "singleton_method"):
             for child in node.children:
-                if child.type in ("identifier", "property_identifier") and child.text:
+                if child.type in ("identifier", "property_identifier", "field_identifier") and child.text:
                     if child.text.decode("utf-8", errors="replace") == fn_name:
                         # Return the body/block child
                         for c in node.children:
-                            if c.type in ("block", "statement_block", "compound_statement"):
+                            if c.type in ("block", "statement_block", "compound_statement",
+                                          "body_statement"):
                                 return c
                         return node
+                # C/C++: name is nested in function_declarator
+                elif child.type == "function_declarator":
+                    for sub in child.children:
+                        if sub.type in ("identifier", "field_identifier") and sub.text:
+                            if sub.text.decode("utf-8", errors="replace") == fn_name:
+                                for c in node.children:
+                                    if c.type in ("compound_statement",):
+                                        return c
+                                return node
     return None
 
 
@@ -203,6 +341,7 @@ def _walk_tree(node):
 def _walk_assignments(node, variables: list, all_var_names: set, line_offset: int):
     """Walk AST to find assignments and their dependencies."""
     for n in _walk_tree(node):
+        # Python/Ruby/JS: assignment node
         if n.type == "assignment":
             left = None
             right = None
@@ -229,6 +368,125 @@ def _walk_assignments(node, variables: list, all_var_names: set, line_offset: in
                     "depends_on": list(deps),
                     "source_expr": rhs_text,
                 })
+
+        # C/C++: declaration with init_declarator
+        elif n.type == "declaration":
+            for child in n.children:
+                if child.type == "init_declarator":
+                    id_node = None
+                    rhs_node = None
+                    saw_eq = False
+                    for sub in child.children:
+                        if sub.type == "identifier" and id_node is None:
+                            id_node = sub
+                        elif sub.type == "=":
+                            saw_eq = True
+                        elif saw_eq and rhs_node is None:
+                            rhs_node = sub
+                    if id_node:
+                        var_name = id_node.text.decode("utf-8", errors="replace")
+                        all_var_names.add(var_name)
+                        rhs_text = rhs_node.text.decode("utf-8", errors="replace") if rhs_node and rhs_node.text else ""
+                        deps = _extract_identifiers_from_node(rhs_node, all_var_names) if rhs_node else set()
+                        line = (id_node.start_point[0] + line_offset) if hasattr(id_node, 'start_point') else 0
+                        variables.append({
+                            "name": var_name,
+                            "line": line,
+                            "depends_on": list(deps),
+                            "source_expr": rhs_text,
+                        })
+
+        # JS/TS: lexical_declaration (const/let) or variable_declaration (var)
+        elif n.type in ("lexical_declaration", "variable_declaration"):
+            for child in n.children:
+                if child.type == "variable_declarator":
+                    _extract_declarator(child, variables, all_var_names, line_offset)
+
+        # Go: short_var_declaration (x := expr)
+        elif n.type == "short_var_declaration":
+            lhs_list = None
+            rhs_list = None
+            saw_assign = False
+            for child in n.children:
+                if child.type == "expression_list" and not saw_assign:
+                    lhs_list = child
+                elif child.type == ":=":
+                    saw_assign = True
+                elif child.type == "expression_list" and saw_assign:
+                    rhs_list = child
+            if lhs_list:
+                for id_node in lhs_list.children:
+                    if id_node.type == "identifier":
+                        var_name = id_node.text.decode("utf-8", errors="replace")
+                        if var_name == "_":
+                            continue
+                        all_var_names.add(var_name)
+                        rhs_text = rhs_list.text.decode("utf-8", errors="replace") if rhs_list and rhs_list.text else ""
+                        deps = _extract_identifiers_from_node(rhs_list, all_var_names) if rhs_list else set()
+                        line = (id_node.start_point[0] + line_offset) if hasattr(id_node, 'start_point') else 0
+                        variables.append({
+                            "name": var_name,
+                            "line": line,
+                            "depends_on": list(deps),
+                            "source_expr": rhs_text,
+                        })
+
+        # Rust: let_declaration (let x = expr; or let x: Type = expr;)
+        elif n.type == "let_declaration":
+            id_node = None
+            rhs_node = None
+            saw_eq = False
+            for child in n.children:
+                if child.type == "identifier" and id_node is None:
+                    id_node = child
+                elif child.type == "=":
+                    saw_eq = True
+                elif saw_eq and rhs_node is None and child.type != ";":
+                    rhs_node = child
+            if id_node:
+                var_name = id_node.text.decode("utf-8", errors="replace")
+                all_var_names.add(var_name)
+                rhs_text = rhs_node.text.decode("utf-8", errors="replace") if rhs_node and rhs_node.text else ""
+                deps = _extract_identifiers_from_node(rhs_node, all_var_names) if rhs_node else set()
+                line = (id_node.start_point[0] + line_offset) if hasattr(id_node, 'start_point') else 0
+                variables.append({
+                    "name": var_name,
+                    "line": line,
+                    "depends_on": list(deps),
+                    "source_expr": rhs_text,
+                })
+
+        # Java: local_variable_declaration
+        elif n.type == "local_variable_declaration":
+            for child in n.children:
+                if child.type == "variable_declarator":
+                    _extract_declarator(child, variables, all_var_names, line_offset)
+
+
+def _extract_declarator(node, variables: list, all_var_names: set, line_offset: int):
+    """Extract variable from a variable_declarator node (JS/TS/Java pattern)."""
+    id_node = None
+    rhs_node = None
+    saw_eq = False
+    for child in node.children:
+        if child.type == "identifier" and id_node is None:
+            id_node = child
+        elif child.type == "=":
+            saw_eq = True
+        elif saw_eq and rhs_node is None:
+            rhs_node = child
+    if id_node:
+        var_name = id_node.text.decode("utf-8", errors="replace")
+        all_var_names.add(var_name)
+        rhs_text = rhs_node.text.decode("utf-8", errors="replace") if rhs_node and rhs_node.text else ""
+        deps = _extract_identifiers_from_node(rhs_node, all_var_names) if rhs_node else set()
+        line = (id_node.start_point[0] + line_offset) if hasattr(id_node, 'start_point') else 0
+        variables.append({
+            "name": var_name,
+            "line": line,
+            "depends_on": list(deps),
+            "source_expr": rhs_text,
+        })
 
 
 def _extract_identifiers_from_node(node, known_vars: set) -> set[str]:
