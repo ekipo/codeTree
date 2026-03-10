@@ -1,5 +1,6 @@
 """Intra-function dataflow and taint analysis using tree-sitter AST."""
 
+import re
 from ..languages.base import LanguagePlugin
 
 # Known taint sources — method calls that return external/untrusted data
@@ -243,7 +244,6 @@ def _extract_identifiers_from_node(node, known_vars: set) -> set[str]:
 
 def _extract_identifiers_from_expr(expr: str) -> list[str]:
     """Simple text-based identifier extraction from an expression string."""
-    import re
     return re.findall(r'\b([a-zA-Z_]\w*)\b', expr)
 
 

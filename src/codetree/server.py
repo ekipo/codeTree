@@ -46,14 +46,16 @@ def create_server(root: str) -> FastMCP:
     cache.save()
 
     # ── Build persistent graph ───────────────────────────────────────────
+    import atexit
     from .graph.store import GraphStore
     from .graph.builder import GraphBuilder
     from .graph.queries import GraphQueries
 
     graph_store = GraphStore(root)
     graph_store.open()
+    atexit.register(graph_store.close)
     graph_builder = GraphBuilder(root, graph_store)
-    graph_builder.build()
+    graph_builder.build(indexer=indexer)
     graph_queries = GraphQueries(graph_store)
 
     # ── Skeleton formatting helpers ──────────────────────────────────────────

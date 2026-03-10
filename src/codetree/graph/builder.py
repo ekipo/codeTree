@@ -23,15 +23,19 @@ class GraphBuilder:
                 "_test." in name or
                 ".test." in name or
                 ".spec." in name or
-                (len(name) > 0 and name[0].isupper() and "Test" in name))
+                (name[0].isupper() and "Test" in name))
 
-    def build(self) -> dict:
+    def build(self, indexer: Indexer | None = None) -> dict:
         """Build or incrementally update the graph.
+
+        Args:
+            indexer: optional pre-built Indexer to reuse (avoids double parsing)
 
         Returns stats: {files_indexed, files_skipped, symbols_created, edges_created}
         """
-        indexer = Indexer(str(self._root))
-        indexer.build()
+        if indexer is None:
+            indexer = Indexer(str(self._root))
+            indexer.build()
 
         # Get current files on disk
         current_files = {}
@@ -50,7 +54,9 @@ class GraphBuilder:
         edges_created = 0
 
         indexed_paths = set()
+        changed_files = []  # Track files that need edge resolution
 
+        # ── Pass 1: Insert all symbols first ──────────────────────────────
         for rel_path, info in current_files.items():
             indexed_paths.add(rel_path)
             existing = self._store.get_file(rel_path)
@@ -101,6 +107,12 @@ class GraphBuilder:
                     self._store.upsert_edge(Edge(parent_qn, qn, "CONTAINS"))
                     edges_created += 1
 
+            changed_files.append((rel_path, info))
+
+        # ── Pass 2: Build CALLS and IMPORTS edges (all symbols now in store) ──
+        for rel_path, info in changed_files:
+            entry = info["entry"]
+
             # Build CALLS edges
             for item in entry.skeleton:
                 if item["type"] not in ("function", "method"):
@@ -108,7 +120,7 @@ class GraphBuilder:
                 caller_qn = make_qualified_name(rel_path, item["name"], item.get("parent"))
                 callees = entry.plugin.extract_calls_in_function(entry.source, item["name"])
                 for callee_name in callees:
-                    # Resolve callee to definition(s)
+                    # Resolve callee to definition(s) — all symbols are in store now
                     targets = self._store.symbols_by_name(callee_name)
                     if targets:
                         for t in targets:
@@ -123,13 +135,9 @@ class GraphBuilder:
             imports = entry.plugin.extract_imports(entry.source)
             for imp in imports:
                 text = imp["text"]
-                # Simple heuristic: extract module name from import text
-                # "from calc import Calculator" -> "calc"
-                # "import os" -> "os"
                 parts = text.split()
                 if len(parts) >= 2:
                     module = parts[1] if parts[0] in ("import", "from") else parts[0]
-                    # Try to find matching file
                     for candidate in current_files:
                         stem = Path(candidate).stem
                         if stem == module or candidate == module:
