@@ -6,7 +6,9 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 codetree is a Python MCP (Model Context Protocol) server that gives coding agents structured code understanding via tree-sitter. Instead of reading entire files, an agent can ask "what classes are in this file?" or "what does this function call?" and get precise, structured answers.
 
-It exposes **16 tools** over MCP:
+It exposes **23 tools** over MCP:
+
+### Structural Analysis Tools (16)
 
 | Tool | Purpose | Returns |
 |------|---------|---------|
@@ -26,6 +28,18 @@ It exposes **16 tools** over MCP:
 | `rank_symbols(top_n?, file_path?)` | Rank symbols by PageRank importance | `1. file.py: class Foo → line 1  (importance: 12.3%)` |
 | `find_tests(file_path, symbol_name)` | Find test functions for a symbol | `test_calc.py: test_add() → line 3  (name match)` |
 | `get_variables(file_path, function_name)` | Local variables in a function | `Parameters:\n  x: int → line 1` |
+
+### Graph & Onboarding Tools (7)
+
+| Tool | Purpose | Returns |
+|------|---------|---------|
+| `index_status()` | Graph index freshness and stats | `{graph_exists, files, symbols, edges, last_indexed_at}` |
+| `get_repository_map(max_items?)` | Compact repo overview for agent onboarding | `{languages, entry_points, hotspots, start_here, test_roots, stats}` |
+| `resolve_symbol(query, kind?, path_hint?)` | Disambiguate short symbol names into qualified matches | `{matches: [{qualified_name, name, kind, file, line}]}` |
+| `search_graph(query?, kind?, file_pattern?, ...)` | Structured graph search with pagination and degree filtering | `{total, results: [{qualified_name, kind, in_degree, out_degree}]}` |
+| `get_change_impact(symbol_query?, diff_scope?)` | Git-aware change impact with risk classification | `{changed_symbols, impact: {CRITICAL, HIGH, MEDIUM}, affected_tests}` |
+| `get_dataflow(file_path, function_name)` | Intra-function variable flow tracking | `{variables, flow_chains, sources, sinks}` |
+| `get_taint_paths(file_path, function_name)` | Security taint analysis (source → sanitizer? → sink) | `{paths: [{verdict, chain, sanitizer, risk}]}` |
 
 `get_file_skeleton` also warns about syntax errors (`WARNING: File has syntax errors — skeleton may be incomplete`).
 
@@ -52,7 +66,7 @@ All `file_path` arguments are **relative to the repo root** (e.g., `"src/main.py
 # Activate venv (required before all commands)
 source .venv/bin/activate
 
-# Run all tests (921 tests, ~20s)
+# Run all tests (~999 tests, ~25s)
 pytest
 
 # Run a single test file
@@ -77,16 +91,27 @@ No linter or formatter is configured.
 
 ```
 MCP tool call → server.py → indexer.py → FileEntry.plugin → tree-sitter parse → structured result
+                         → graph/ package → SQLite .codetree/graph.db → onboarding, search, impact, dataflow
 ```
 
 ### Core modules (`src/codetree/`)
 
 | File | Responsibility |
 |---|---|
-| `server.py` | FastMCP 3.1.0 server — defines the 17 tools, wires cache + indexer at startup. Language-unaware. |
+| `server.py` | FastMCP 3.1.0 server — defines the 23 tools, wires cache + indexer + graph at startup. Language-unaware. |
 | `indexer.py` | Discovers files, stores a `FileEntry` per file (with its plugin + `has_errors` flag), routes all queries through the stored plugin. Builds a definition index and lazy call graph for dead code, blast radius, and clone detection. Skips `.venv`, `node_modules`, `__pycache__`, `.git`, etc. |
 | `cache.py` | `.codetree/index.json` — stores pre-computed skeletons with mtime-based invalidation. Language-unaware. |
 | `registry.py` | Maps file extensions → plugin instances. The **only** place languages are registered. |
+
+### Graph layer (`src/codetree/graph/`)
+
+| File | Responsibility |
+|---|---|
+| `models.py` | `SymbolNode`, `Edge` dataclasses and `make_qualified_name()` — the data model for the persistent graph. |
+| `store.py` | `GraphStore` — SQLite CRUD for symbols, edges, files, meta tables. Stores graph at `.codetree/graph.db`. |
+| `builder.py` | `GraphBuilder` — Incremental graph build from indexer data. Uses sha256 content hashing to skip unchanged files. Creates CALLS, CONTAINS, and IMPORTS edges. |
+| `queries.py` | `GraphQueries` — `repository_map()`, `resolve_symbol()`, `search_graph()`, `change_impact()`. Powers the 5 onboarding/search/impact tools. |
+| `dataflow.py` | `extract_dataflow()`, `extract_taint_paths()` — Intra-function variable flow tracking and security taint analysis using tree-sitter AST. |
 
 ### Plugin system (`src/codetree/languages/`)
 
@@ -140,6 +165,13 @@ Each plugin implements:
 | `test_importance.py` | PageRank symbol importance |
 | `test_discovery.py` | Test function discovery |
 | `test_variables.py` | Variable extraction per-language + MCP tool |
+| `test_graph_store.py` | SQLite graph store CRUD — symbols, edges, files, meta, stats |
+| `test_graph_builder.py` | Incremental graph builder — full build, incremental, changed/deleted files, test detection |
+| `test_graph_queries.py` | Graph queries — repository map, resolve symbol, search graph |
+| `test_onboarding_tools.py` | MCP tools: index_status, get_repository_map, resolve_symbol, search_graph |
+| `test_change_impact.py` | Change impact — symbol-based, git-diff-based, transitive callers, risk classification |
+| `test_dataflow.py` | Dataflow engine — variable tracking, dependency edges, taint sources/sinks |
+| `test_dataflow_tools.py` | MCP tools: get_dataflow, get_taint_paths |
 
 Fixtures in `conftest.py`: `sample_repo` (Python-only), `rich_py_repo` (decorators/dataclasses), `multi_lang_repo` (5 languages).
 
