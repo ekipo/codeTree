@@ -46,7 +46,7 @@ Coding agents today understand code the same way a human greps through a codebas
 
 ## 3. The Solution
 
-codetree sits between the agent and the repo, parsing every file with tree-sitter and exposing 16 structured tools over MCP.
+codetree sits between the agent and the repo, parsing every file with tree-sitter and exposing 23 structured tools over MCP.
 
 **How it works:**
 ```
@@ -120,7 +120,7 @@ The agent sees every class, method, and docstring — with line numbers — with
 
 ---
 
-## 5. The 16 Tools
+## 5. The 23 Tools
 
 ### Understand Structure
 
@@ -158,6 +158,23 @@ The agent sees every class, method, and docstring — with line numbers — with
 | `find_tests` | Find test functions for any symbol | `test_add()` and `test_add_negative()` cover `add()` |
 | `get_variables` | Parameters + local variables in a function | `data: list[int]`, `result`, `item` (loop var) |
 
+### Onboarding & Graph
+
+| Tool | What it does | Example |
+|------|-------------|---------|
+| `index_status` | Graph index freshness and stats | See how many files, symbols, and edges are indexed |
+| `get_repository_map` | Compact repo overview for agent onboarding | Languages, entry points, hotspots, suggested starting points |
+| `resolve_symbol` | Disambiguate a short name into ranked qualified matches | "add" → `calc.py::Calculator.add`, `math.py::add` |
+| `search_graph` | Flexible graph search with degree filters and pagination | All functions with >5 inbound calls |
+
+### Change & Dataflow
+
+| Tool | What it does | Example |
+|------|-------------|---------|
+| `get_change_impact` | Impact analysis via symbol name or git diff | Change `add()` → CRITICAL: 3 direct callers, HIGH: 5 transitive |
+| `get_dataflow` | Intra-function variable dataflow tracing | `data` flows to `result` via `process(data)` |
+| `get_taint_paths` | Security taint analysis: untrusted sources to dangerous sinks | `request.args` → `query` → `cursor.execute(query)` = UNSAFE (SQL injection) |
+
 ### Compact Mode
 
 Three tools (`get_file_skeleton`, `get_skeletons`, `search_symbols`) accept `format="compact"` for even fewer tokens:
@@ -173,7 +190,7 @@ cls Calculator:4 # A scientific calculator.
 
 ## 6. Supported Languages
 
-10 languages. 16 file extensions. All backed by official tree-sitter grammars.
+10 languages. 16 file extensions. All backed by official tree-sitter grammars. Plus a persistent graph layer for onboarding, change impact, and security analysis.
 
 | Language | Extensions |
 |----------|-----------|
@@ -274,7 +291,7 @@ claude mcp add codetree -- uvx --from mcp-server-codetree codetree --root .
 ┌─────────────────────────────────────────────────┐
 │  codetree server (FastMCP)                      │
 │                                                 │
-│  16 tools │ Cache (.codetree/index.json)        │
+│  23 tools │ Cache (.codetree/index.json)        │
 │           │ mtime-based invalidation            │
 └──────────────────┬──────────────────────────────┘
                    │
@@ -317,10 +334,10 @@ claude mcp add codetree -- uvx --from mcp-server-codetree codetree --root .
 
 | Metric | Value |
 |--------|-------|
-| MCP tools | 16 |
+| MCP tools | 23 |
 | Supported languages | 10 |
 | File extensions | 16 |
-| Test count | 921 |
+| Test count | 999 |
 | Startup time | ~1 second |
 | Install | `uvx --from mcp-server-codetree codetree` |
 | Python support | 3.10, 3.11, 3.12, 3.13 |
@@ -369,7 +386,7 @@ claude mcp add codetree -- uvx --from mcp-server-codetree codetree --root .
 
 ## 13. Social Proof / Trust Signals
 
-- 921 tests passing across all 10 languages
+- 999 tests passing across all 10 languages
 - CI on Python 3.10–3.13
 - MIT licensed — use it anywhere
 - Built on tree-sitter (trusted by GitHub, Neovim, Zed, Helix)
