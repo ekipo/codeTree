@@ -6,9 +6,9 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 codetree is a Python MCP (Model Context Protocol) server that gives coding agents structured code understanding via tree-sitter. Instead of reading entire files, an agent can ask "what classes are in this file?" or "what does this function call?" and get precise, structured answers.
 
-It exposes **30 tools** over MCP:
+It exposes **23 tools** over MCP:
 
-### Structural Analysis Tools (16)
+### Structural Analysis Tools (13)
 
 | Tool | Purpose | Returns |
 |------|---------|---------|
@@ -23,13 +23,10 @@ It exposes **30 tools** over MCP:
 | `find_dead_code(file_path?)` | Symbols defined but never referenced | `Dead code in calc.py:\n  function unused() → line 15` |
 | `get_blast_radius(file_path, symbol_name)` | Transitive impact analysis | `Direct callers:\n  main.py: run() → line 4` |
 | `detect_clones(file_path?, min_lines?)` | Duplicate/near-duplicate functions | `Clone group 1 (2 functions, 12 lines each):` |
-| `get_ast(file_path, symbol_name?, max_depth?)` | Raw AST as S-expression | `(function_definition [5:0-7:0] ...)` |
 | `search_symbols(query?, type?, parent?, ..., format?)` | Flexible symbol search; `format="compact"` omits doc lines | `calc.py: class Calculator → line 1` |
-| `rank_symbols(top_n?, file_path?)` | Rank symbols by PageRank importance | `1. file.py: class Foo → line 1  (importance: 12.3%)` |
 | `find_tests(file_path, symbol_name)` | Find test functions for a symbol | `test_calc.py: test_add() → line 3  (name match)` |
-| `get_variables(file_path, function_name)` | Local variables in a function | `Parameters:\n  x: int → line 1` |
 
-### Graph & Onboarding Tools (14)
+### Graph & Onboarding Tools (10)
 
 | Tool | Purpose | Returns |
 |------|---------|---------|
@@ -38,14 +35,10 @@ It exposes **30 tools** over MCP:
 | `resolve_symbol(query, kind?, path_hint?)` | Disambiguate short symbol names into qualified matches | `{matches: [{qualified_name, name, kind, file, line}]}` |
 | `search_graph(query?, kind?, file_pattern?, ...)` | Structured graph search with pagination and degree filtering | `{total, results: [{qualified_name, kind, in_degree, out_degree}]}` |
 | `get_change_impact(symbol_query?, diff_scope?)` | Git-aware change impact with risk classification | `{changed_symbols, impact: {CRITICAL, HIGH, MEDIUM}, affected_tests}` |
-| `get_dataflow(file_path, function_name)` | Intra-function variable flow tracking | `{variables, flow_chains, sources, sinks}` |
-| `get_taint_paths(file_path, function_name)` | Security taint analysis (source → sanitizer? → sink) | `{paths: [{verdict, chain, sanitizer, risk}]}` |
-| `get_cross_function_taint(file_path, function_name, depth?)` | Cross-file taint tracing through call boundaries | `{taint_paths: [{chain, verdict}], depth}` |
+| `analyze_dataflow(file_path, function_name, mode?, depth?)` | Variable dataflow (`mode="flow"`), taint analysis (`"taint"`), or cross-function taint (`"cross_taint"`) | `{variables, sinks}` or `{paths: [{verdict, risk}]}` |
 | `find_hot_paths(top_n?)` | High-complexity × high-call-count optimization targets | `file:line — name (complexity=N, callers=M, score=S)` |
 | `get_dependency_graph(file_path?, format?)` | File-level dependency graph as Mermaid or list | `graph LR\n  main.py --> calc.py` |
-| `get_blame(file_path)` | Per-line git blame with author summary | `line 1: author (commit, date) code` |
-| `get_churn(top_n?, since?)` | Most-changed files by commit count | `file (N commits, +A/-D lines)` |
-| `get_change_coupling(file_path?, top_n?, min_commits?)` | Files that change together (temporal coupling) | `a.py ↔ b.py (N co-commits, ratio=0.8)` |
+| `git_history(mode?, file_path?, top_n?, since?, min_commits?)` | Git blame (`mode="blame"`), file churn (`"churn"`), or change coupling (`"coupling"`) | Author summary, churn list, or coupled file pairs |
 | `suggest_docs(file_path?, symbol_name?)` | Find undocumented functions with context for doc generation | `file:line — name(params), calls: [...], callers: [...]` |
 
 `get_file_skeleton` also warns about syntax errors (`WARNING: File has syntax errors — skeleton may be incomplete`).
@@ -73,7 +66,7 @@ All `file_path` arguments are **relative to the repo root** (e.g., `"src/main.py
 # Activate venv (required before all commands)
 source .venv/bin/activate
 
-# Run all tests (~1070 tests, ~35s)
+# Run all tests (~1058 tests, ~35s)
 pytest
 
 # Run a single test file
@@ -105,7 +98,7 @@ MCP tool call → server.py → indexer.py → FileEntry.plugin → tree-sitter 
 
 | File | Responsibility |
 |---|---|
-| `server.py` | FastMCP 3.1.0 server — defines the 30 tools, wires cache + indexer + graph at startup. Language-unaware. |
+| `server.py` | FastMCP 3.1.0 server — defines the 23 tools, wires cache + indexer + graph at startup. Language-unaware. |
 | `indexer.py` | Discovers files, stores a `FileEntry` per file (with its plugin + `has_errors` flag), routes all queries through the stored plugin. Builds a definition index and lazy call graph for dead code, blast radius, and clone detection. Skips `.venv`, `node_modules`, `__pycache__`, `.git`, etc. |
 | `cache.py` | `.codetree/index.json` — stores pre-computed skeletons with mtime-based invalidation. Language-unaware. |
 | `registry.py` | Maps file extensions → plugin instances. The **only** place languages are registered. |
@@ -167,20 +160,20 @@ Each plugin implements:
 | `test_dead_code.py` | Definition index, `find_dead_code` indexer method + MCP tool |
 | `test_blast_radius.py` | Lazy call graph, `get_blast_radius` indexer method + MCP tool |
 | `test_clones.py` | Clone normalization, `detect_clones` indexer method + MCP tool |
-| `test_ast.py` | `get_ast_sexp` plugin method, `get_ast` indexer + MCP tool |
+| `test_ast.py` | `get_ast_sexp` plugin method + `get_ast` indexer method |
 | `test_search.py` | `search_symbols` indexer method + MCP tool |
 | `test_token_opt.py` | Compact format for skeleton/search tools |
-| `test_importance.py` | PageRank symbol importance |
+| `test_importance.py` | PageRank symbol importance (indexer-level) |
 | `test_discovery.py` | Test function discovery |
-| `test_variables.py` | Variable extraction per-language + MCP tool |
+| `test_variables.py` | Variable extraction per-language + indexer integration |
 | `test_graph_store.py` | SQLite graph store CRUD — symbols, edges, files, meta, stats |
 | `test_graph_builder.py` | Incremental graph builder — full build, incremental, changed/deleted files, test detection |
 | `test_graph_queries.py` | Graph queries — repository map, resolve symbol, search graph |
 | `test_onboarding_tools.py` | MCP tools: index_status, get_repository_map, resolve_symbol, search_graph |
 | `test_change_impact.py` | Change impact — symbol-based, git-diff-based, transitive callers, risk classification |
 | `test_dataflow.py` | Dataflow engine — variable tracking, dependency edges, taint sources/sinks, cross-function taint |
-| `test_dataflow_tools.py` | MCP tools: get_dataflow, get_taint_paths, get_cross_function_taint |
-| `test_git_analysis.py` | Git blame, churn, change coupling — analysis functions + MCP tools |
+| `test_dataflow_tools.py` | MCP tool: analyze_dataflow (flow, taint, cross_taint modes) |
+| `test_git_analysis.py` | Git blame, churn, change coupling — analysis functions + `git_history` MCP tool |
 | `test_doc_suggestions.py` | Auto-documentation suggestions — undocumented function detection + context assembly |
 
 Fixtures in `conftest.py`: `sample_repo` (Python-only), `rich_py_repo` (decorators/dataclasses), `multi_lang_repo` (5 languages).

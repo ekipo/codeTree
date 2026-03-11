@@ -2,11 +2,6 @@
 import pytest
 from codetree.indexer import Indexer
 from codetree.languages.python import PythonPlugin
-from codetree.server import create_server
-
-
-def _tool(mcp, name):
-    return mcp.local_provider._components[f"tool:{name}@"].fn
 
 
 PY = PythonPlugin()
@@ -364,40 +359,3 @@ class TestRubyVariables:
         src = b"def foo\nend\n"
         result = RUBY.extract_variables(src, "nonexistent")
         assert result == []
-
-
-# ─── MCP tool: get_variables ────────────────────────────────────────────────
-
-class TestGetVariablesTool:
-
-    def test_shows_variables(self, tmp_path):
-        (tmp_path / "app.py").write_text("def foo():\n    x = 1\n    y = 'hello'\n    return x + y\n")
-        fn = _tool(create_server(str(tmp_path)), "get_variables")
-        result = fn(file_path="app.py", function_name="foo")
-        assert "x" in result
-        assert "y" in result
-
-    def test_shows_types(self, tmp_path):
-        (tmp_path / "app.py").write_text("def foo():\n    x: int = 42\n    return x\n")
-        fn = _tool(create_server(str(tmp_path)), "get_variables")
-        result = fn(file_path="app.py", function_name="foo")
-        assert "int" in result
-
-    def test_shows_kinds(self, tmp_path):
-        (tmp_path / "app.py").write_text("def foo(a):\n    x = 1\n    for i in range(10):\n        pass\n")
-        fn = _tool(create_server(str(tmp_path)), "get_variables")
-        result = fn(file_path="app.py", function_name="foo")
-        assert "parameter" in result.lower() or "param" in result.lower()
-        assert "loop" in result.lower()
-
-    def test_file_not_found(self, tmp_path):
-        (tmp_path / "x.py").write_text("x = 1\n")
-        fn = _tool(create_server(str(tmp_path)), "get_variables")
-        result = fn(file_path="ghost.py", function_name="foo")
-        assert "not found" in result.lower()
-
-    def test_function_not_found(self, tmp_path):
-        (tmp_path / "app.py").write_text("def foo(): pass\n")
-        fn = _tool(create_server(str(tmp_path)), "get_variables")
-        result = fn(file_path="app.py", function_name="nonexistent")
-        assert "no variables" in result.lower() or "not found" in result.lower()

@@ -190,14 +190,14 @@ class TestCrossFunctionTaintTool:
             '    db.execute(f"SELECT {data}")\n'
         )
         mcp = create_server(str(tmp_path))
-        fn = _tool(mcp, "get_cross_function_taint")
-        result = fn(file_path="app.py", function_name="handler")
+        fn = _tool(mcp, "analyze_dataflow")
+        result = fn(file_path="app.py", function_name="handler", mode="cross_taint")
         assert "entry" in result
         assert "paths" in result
 
     def test_tool_file_not_found(self, tmp_path):
         (tmp_path / "x.py").write_text("x = 1\n")
         mcp = create_server(str(tmp_path))
-        fn = _tool(mcp, "get_cross_function_taint")
-        result = fn(file_path="nope.py", function_name="foo")
+        fn = _tool(mcp, "analyze_dataflow")
+        result = fn(file_path="nope.py", function_name="foo", mode="cross_taint")
         assert "error" in result

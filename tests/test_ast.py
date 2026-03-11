@@ -2,11 +2,6 @@
 import pytest
 from codetree.indexer import Indexer
 from codetree.languages.python import PythonPlugin
-from codetree.server import create_server
-
-
-def _tool(mcp, name):
-    return mcp.local_provider._components[f"tool:{name}@"].fn
 
 
 PY = PythonPlugin()
@@ -80,39 +75,3 @@ class TestAstIndexer:
         indexer.build()
         result = indexer.get_ast("ghost.py")
         assert result is None
-
-
-# ─── MCP tool: get_ast ───────────────────────────────────────────────────────
-
-class TestGetAstTool:
-
-    def test_full_file(self, tmp_path):
-        (tmp_path / "app.py").write_text("def foo(): pass\n")
-        fn = _tool(create_server(str(tmp_path)), "get_ast")
-        result = fn(file_path="app.py")
-        assert "function_definition" in result
-        assert "foo" in result
-
-    def test_specific_symbol(self, tmp_path):
-        (tmp_path / "app.py").write_text("def foo(): pass\ndef bar(): pass\n")
-        fn = _tool(create_server(str(tmp_path)), "get_ast")
-        result = fn(file_path="app.py", symbol_name="foo")
-        assert "foo" in result
-
-    def test_max_depth(self, tmp_path):
-        (tmp_path / "app.py").write_text("def foo(): pass\n")
-        fn = _tool(create_server(str(tmp_path)), "get_ast")
-        result = fn(file_path="app.py", max_depth=1)
-        assert "..." in result
-
-    def test_file_not_found(self, tmp_path):
-        (tmp_path / "x.py").write_text("x = 1\n")
-        fn = _tool(create_server(str(tmp_path)), "get_ast")
-        result = fn(file_path="ghost.py")
-        assert "not found" in result.lower()
-
-    def test_symbol_not_found(self, tmp_path):
-        (tmp_path / "app.py").write_text("def foo(): pass\n")
-        fn = _tool(create_server(str(tmp_path)), "get_ast")
-        result = fn(file_path="app.py", symbol_name="nonexistent")
-        assert "not found" in result.lower()

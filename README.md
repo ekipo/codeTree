@@ -7,7 +7,7 @@
 
 **Stop feeding entire files to your AI agent.**
 
-codetree is an [MCP](https://modelcontextprotocol.io/) server that gives coding agents structured code understanding via [tree-sitter](https://tree-sitter.github.io/) — so they ask precise questions instead of reading thousands of lines. 30 tools, 10 languages, ~1 second startup. No vector DB, no embedding model, no config.
+codetree is an [MCP](https://modelcontextprotocol.io/) server that gives coding agents structured code understanding via [tree-sitter](https://tree-sitter.github.io/) — so they ask precise questions instead of reading thousands of lines. 23 tools, 10 languages, ~1 second startup. No vector DB, no embedding model, no config.
 
 ## Quick Start
 
@@ -76,7 +76,7 @@ class Calculator → line 4
 
 The agent sees every class, method, and docstring — with line numbers — without reading a single function body. When it needs the full source of `divide`, it calls `get_symbol("calculator.py", "divide")` and gets just those 6 lines.
 
-## 30 Tools
+## 23 Tools
 
 ### Understand Structure
 
@@ -95,7 +95,6 @@ The agent sees every class, method, and docstring — with line numbers — with
 | `find_references(symbol_name)` | All usages of a symbol across the repo |
 | `get_call_graph(file_path, function_name)` | What a function calls + what calls it |
 | `get_blast_radius(file_path, symbol_name)` | Transitive impact — what breaks if you change this |
-| `rank_symbols(top_n?, file_path?)` | PageRank importance — which symbols matter most |
 
 ### Analyze Quality
 
@@ -110,9 +109,7 @@ The agent sees every class, method, and docstring — with line numbers — with
 | Tool | Purpose |
 |------|---------|
 | `search_symbols(query?, type?, parent?)` | Flexible symbol search with filters |
-| `get_ast(file_path, symbol_name?, max_depth?)` | Raw AST as S-expression |
 | `find_tests(file_path, symbol_name)` | Find test functions for a symbol |
-| `get_variables(file_path, function_name)` | Local variables and parameters |
 
 ### Onboarding & Graph
 
@@ -128,9 +125,7 @@ The agent sees every class, method, and docstring — with line numbers — with
 | Tool | Purpose |
 |------|---------|
 | `get_change_impact(symbol_query?, diff_scope?)` | Impact analysis via symbol or git diff, with risk levels |
-| `get_dataflow(file_path, function_name)` | Intra-function variable dataflow tracing |
-| `get_taint_paths(file_path, function_name)` | Security taint analysis: untrusted sources to dangerous sinks |
-| `get_cross_function_taint(file_path, function_name, depth?)` | Cross-file taint tracing through call boundaries |
+| `analyze_dataflow(file_path, function_name, mode?)` | Variable dataflow, taint analysis, or cross-function taint tracing |
 
 ### Visualization & History
 
@@ -138,9 +133,7 @@ The agent sees every class, method, and docstring — with line numbers — with
 |------|---------|
 | `find_hot_paths(top_n?)` | High-complexity × high-call-count optimization targets |
 | `get_dependency_graph(file_path?, format?)` | File-level dependency graph as Mermaid or list |
-| `get_blame(file_path)` | Per-line git blame with author summary |
-| `get_churn(top_n?, since?)` | Most-changed files by commit count |
-| `get_change_coupling(file_path?, top_n?, min_commits?)` | Files that change together (temporal coupling) |
+| `git_history(mode?, file_path?, top_n?)` | Git blame, file churn, or change coupling analysis |
 | `suggest_docs(file_path?, symbol_name?)` | Find undocumented functions with context for doc generation |
 
 > `get_file_skeleton`, `get_skeletons`, and `search_symbols` accept `format="compact"` for even fewer tokens.
@@ -262,7 +255,7 @@ codetree server (FastMCP)
 
 | Module | Responsibility |
 |--------|---------------|
-| `server.py` | FastMCP server — defines all 30 tools |
+| `server.py` | FastMCP server — defines all 23 tools |
 | `indexer.py` | File discovery, plugin dispatch, definition index |
 | `cache.py` | Skeleton cache with mtime invalidation |
 | `registry.py` | Maps file extensions to language plugins |
@@ -291,7 +284,7 @@ source .venv/bin/activate
 pip install -e .
 pip install pytest
 
-# Run all tests (~1070 tests, ~35s)
+# Run all tests (~1058 tests, ~35s)
 pytest
 
 # Run a single test file

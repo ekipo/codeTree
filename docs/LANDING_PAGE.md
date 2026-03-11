@@ -139,7 +139,6 @@ The agent sees every class, method, and docstring — with line numbers — with
 | `find_references` | Every usage of a symbol across the whole repo | "Who calls `add()`?" → 12 files |
 | `get_call_graph` | What a function calls + what calls it | `divide` calls `validate` and is called from `main.py:20` |
 | `get_blast_radius` | Transitive impact — what breaks if you change this | Change `add()` → affects 3 functions across 3 files |
-| `rank_symbols` | PageRank importance — which symbols matter most | `Indexer` class is the most referenced symbol (12.3%) |
 
 ### Analyze Quality
 
@@ -154,9 +153,7 @@ The agent sees every class, method, and docstring — with line numbers — with
 | Tool | What it does | Example |
 |------|-------------|---------|
 | `search_symbols` | Flexible search with filters (name, type, parent, doc, complexity, language) | "All methods in Calculator with no docstring" |
-| `get_ast` | Raw AST as S-expression | Inspect the parse tree of any symbol |
 | `find_tests` | Find test functions for any symbol | `test_add()` and `test_add_negative()` cover `add()` |
-| `get_variables` | Parameters + local variables in a function | `data: list[int]`, `result`, `item` (loop var) |
 
 ### Onboarding & Graph
 
@@ -167,13 +164,16 @@ The agent sees every class, method, and docstring — with line numbers — with
 | `resolve_symbol` | Disambiguate a short name into ranked qualified matches | "add" → `calc.py::Calculator.add`, `math.py::add` |
 | `search_graph` | Flexible graph search with degree filters and pagination | All functions with >5 inbound calls |
 
-### Change & Dataflow
+### Change, Dataflow & Git
 
 | Tool | What it does | Example |
 |------|-------------|---------|
 | `get_change_impact` | Impact analysis via symbol name or git diff | Change `add()` → CRITICAL: 3 direct callers, HIGH: 5 transitive |
-| `get_dataflow` | Intra-function variable dataflow tracing | `data` flows to `result` via `process(data)` |
-| `get_taint_paths` | Security taint analysis: untrusted sources to dangerous sinks | `request.args` → `query` → `cursor.execute(query)` = UNSAFE (SQL injection) |
+| `analyze_dataflow` | Variable flow, taint analysis, cross-function taint (3 modes) | `request.args` → `query` → `cursor.execute(query)` = UNSAFE (SQL injection) |
+| `find_hot_paths` | High-complexity, high-call-count optimization targets | `build()` (complexity=8, callers=5, score=40) |
+| `get_dependency_graph` | File-level dependency graph as Mermaid or list | `main.py --> calc.py --> math_helpers.py` |
+| `git_history` | Git blame, churn, and change coupling (3 modes) | `server.py` changed 45 times; always changes with `indexer.py` |
+| `suggest_docs` | Find undocumented functions with context for doc generation | `_should_skip(path)`, calls: [is_hidden], callers: [build] |
 
 ### Compact Mode
 

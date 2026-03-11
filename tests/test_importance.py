@@ -1,11 +1,6 @@
 """Tests for symbol importance ranking."""
 import pytest
 from codetree.indexer import Indexer
-from codetree.server import create_server
-
-
-def _tool(mcp, name):
-    return mcp.local_provider._components[f"tool:{name}@"].fn
 
 
 # ─── PageRank (indexer) ─────────────────────────────────────────────────────
@@ -76,38 +71,3 @@ class TestSymbolImportance:
         total = sum(r["score"] for r in ranked)
         # PageRank scores should sum to ~1.0 (within rounding)
         assert abs(total - 1.0) < 0.1
-
-
-# ─── MCP tool: rank_symbols ─────────────────────────────────────────────────
-
-class TestRankSymbolsTool:
-
-    def test_returns_ranked_list(self, sample_repo):
-        fn = _tool(create_server(str(sample_repo)), "rank_symbols")
-        result = fn()
-        assert "Calculator" in result
-        assert "score" in result.lower() or "importance" in result.lower()
-
-    def test_top_n(self, sample_repo):
-        fn = _tool(create_server(str(sample_repo)), "rank_symbols")
-        result = fn(top_n=2)
-        # Should have at most 2 entries
-        lines = [l for l in result.strip().split("\n") if l.strip().startswith(("1.", "2.", "3."))]
-        assert len(lines) <= 2
-
-    def test_file_scope(self, sample_repo):
-        fn = _tool(create_server(str(sample_repo)), "rank_symbols")
-        result = fn(file_path="calculator.py")
-        assert "calculator.py" in result
-        assert "main.py" not in result
-
-    def test_empty_repo(self, tmp_path):
-        (tmp_path / "empty.py").write_text("x = 1\n")
-        fn = _tool(create_server(str(tmp_path)), "rank_symbols")
-        result = fn()
-        assert "no symbols" in result.lower()
-
-    def test_shows_file_and_line(self, sample_repo):
-        fn = _tool(create_server(str(sample_repo)), "rank_symbols")
-        result = fn()
-        assert "line" in result.lower() or ":" in result

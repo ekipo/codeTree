@@ -144,26 +144,38 @@ class TestChangeCoupling:
         assert results == []
 
 
-# ─── MCP tools ──────────────────────────────────────────────────────────────
+# ─── MCP tool: git_history ──────────────────────────────────────────────────
 
-class TestGitTools:
+class TestGitHistoryTool:
 
-    def test_blame_tool(self, git_repo):
+    def test_blame_mode(self, git_repo):
         mcp = create_server(str(git_repo))
-        fn = _tool(mcp, "get_blame")
-        result = fn(file_path="calc.py")
+        fn = _tool(mcp, "git_history")
+        result = fn(mode="blame", file_path="calc.py")
         assert "Test Author" in result
         assert isinstance(result, str)
 
-    def test_churn_tool(self, git_repo):
+    def test_blame_requires_file_path(self, git_repo):
         mcp = create_server(str(git_repo))
-        fn = _tool(mcp, "get_churn")
-        result = fn(top_n=5)
+        fn = _tool(mcp, "git_history")
+        result = fn(mode="blame")
+        assert "required" in result.lower()
+
+    def test_churn_mode(self, git_repo):
+        mcp = create_server(str(git_repo))
+        fn = _tool(mcp, "git_history")
+        result = fn(mode="churn", top_n=5)
         assert isinstance(result, str)
         assert "calc.py" in result
 
-    def test_change_coupling_tool(self, git_repo):
+    def test_coupling_mode(self, git_repo):
         mcp = create_server(str(git_repo))
-        fn = _tool(mcp, "get_change_coupling")
-        result = fn(min_commits=2)
+        fn = _tool(mcp, "git_history")
+        result = fn(mode="coupling", min_commits=2)
         assert isinstance(result, str)
+
+    def test_default_mode_is_blame(self, git_repo):
+        mcp = create_server(str(git_repo))
+        fn = _tool(mcp, "git_history")
+        result = fn(file_path="calc.py")
+        assert "Blame" in result

@@ -29,40 +29,45 @@ def mcp_with_dataflow():
         yield mcp
 
 
-class TestGetDataflow:
+class TestAnalyzeDataflowFlow:
     def test_returns_variables(self, mcp_with_dataflow):
-        fn = _tool(mcp_with_dataflow, "get_dataflow")
-        result = fn(file_path="app.py", function_name="process")
+        fn = _tool(mcp_with_dataflow, "analyze_dataflow")
+        result = fn(file_path="app.py", function_name="process", mode="flow")
         assert "variables" in result
         var_names = {v["name"] for v in result["variables"]}
         assert "user_input" in var_names
 
     def test_returns_sinks(self, mcp_with_dataflow):
-        fn = _tool(mcp_with_dataflow, "get_dataflow")
-        result = fn(file_path="app.py", function_name="process")
+        fn = _tool(mcp_with_dataflow, "analyze_dataflow")
+        result = fn(file_path="app.py", function_name="process", mode="flow")
         assert len(result["sinks"]) > 0
 
     def test_file_not_found(self, mcp_with_dataflow):
-        fn = _tool(mcp_with_dataflow, "get_dataflow")
-        result = fn(file_path="nope.py", function_name="foo")
+        fn = _tool(mcp_with_dataflow, "analyze_dataflow")
+        result = fn(file_path="nope.py", function_name="foo", mode="flow")
         assert "error" in result
 
-
-class TestGetTaintPaths:
-    def test_safe_path(self, mcp_with_dataflow):
-        fn = _tool(mcp_with_dataflow, "get_taint_paths")
+    def test_default_mode_is_flow(self, mcp_with_dataflow):
+        fn = _tool(mcp_with_dataflow, "analyze_dataflow")
         result = fn(file_path="app.py", function_name="process")
+        assert "variables" in result
+
+
+class TestAnalyzeDataflowTaint:
+    def test_safe_path(self, mcp_with_dataflow):
+        fn = _tool(mcp_with_dataflow, "analyze_dataflow")
+        result = fn(file_path="app.py", function_name="process", mode="taint")
         safe = [p for p in result["paths"] if p["verdict"] == "SAFE"]
         assert len(safe) > 0
 
     def test_unsafe_path(self, mcp_with_dataflow):
-        fn = _tool(mcp_with_dataflow, "get_taint_paths")
-        result = fn(file_path="unsafe.py", function_name="handle")
+        fn = _tool(mcp_with_dataflow, "analyze_dataflow")
+        result = fn(file_path="unsafe.py", function_name="handle", mode="taint")
         unsafe = [p for p in result["paths"] if p["verdict"] == "UNSAFE"]
         assert len(unsafe) > 0
         assert unsafe[0]["risk"] is not None
 
     def test_file_not_found(self, mcp_with_dataflow):
-        fn = _tool(mcp_with_dataflow, "get_taint_paths")
-        result = fn(file_path="nope.py", function_name="foo")
+        fn = _tool(mcp_with_dataflow, "analyze_dataflow")
+        result = fn(file_path="nope.py", function_name="foo", mode="taint")
         assert "error" in result

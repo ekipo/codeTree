@@ -119,9 +119,9 @@ Imports in src/codetree/server.py:
 
 ---
 
-## Group 2: Navigate Relationships (4 tools)
+## Group 2: Navigate Relationships (3 tools)
 
-*"Who uses this? What does this call? What's the most important code?"*
+*"Who uses this? What does this call? What breaks if I change it?"*
 
 ### 6. `find_references(symbol_name)`
 
@@ -192,31 +192,11 @@ Impact summary: 4 functions in 2 files may be affected
 
 ---
 
-### 9. `rank_symbols(top_n?, file_path?)`
-
-PageRank for code — which symbols are the most important?
-
-```
-Agent: rank_symbols(top_n=5)
-
-Returns:
-Symbol importance ranking:
-  1. src/codetree/indexer.py: class Indexer → line 15  (importance: 12.3%)
-  2. src/codetree/languages/base.py: class LanguagePlugin → line 8  (importance: 8.7%)
-  3. src/codetree/server.py: function create_server → line 7  (importance: 6.2%)
-  4. src/codetree/registry.py: function get_plugin → line 5  (importance: 4.1%)
-  5. src/codetree/cache.py: class Cache → line 8  (importance: 3.5%)
-```
-
-**Why it matters:** When an agent lands in an unfamiliar codebase, this tells it "start here — these are the core pieces."
-
----
-
 ## Group 3: Analyze Quality (3 tools)
 
 *"Is this function too complex? Is there dead code? Are there duplicates?"*
 
-### 10. `get_complexity(file_path, function_name)`
+### 9. `get_complexity(file_path, function_name)`
 
 Cyclomatic complexity — how many paths through the code?
 
@@ -232,7 +212,7 @@ Complexity of build() in src/codetree/indexer.py: 8
 
 ---
 
-### 11. `find_dead_code(file_path?)`
+### 10. `find_dead_code(file_path?)`
 
 Find functions that exist but nobody calls.
 
@@ -251,7 +231,7 @@ Summary: 2 dead symbols across 1 file
 
 ---
 
-### 12. `detect_clones(file_path?, min_lines?)`
+### 11. `detect_clones(file_path?, min_lines?)`
 
 Find copy-pasted functions (even with renamed variables).
 
@@ -270,11 +250,11 @@ Summary: 1 clone group, 2 functions
 
 ---
 
-## Group 4: Inspect & Search (4 tools)
+## Group 4: Inspect & Search (2 tools)
 
-*"Find me all classes without docs. Show me the AST. What tests cover this?"*
+*"Find me all classes without docs. What tests cover this?"*
 
-### 13. `search_symbols(query?, type?, parent?, has_doc?, min_complexity?, language?, format?)`
+### 12. `search_symbols(query?, type?, parent?, has_doc?, min_complexity?, language?, format?)`
 
 Flexible search across the whole repo.
 
@@ -293,31 +273,7 @@ Found 2 symbols
 
 ---
 
-### 14. `get_ast(file_path, symbol_name?, max_depth?)`
-
-Raw parse tree as S-expression.
-
-```
-Agent: get_ast("calculator.py", "add", max_depth=2)
-
-Returns:
-AST for add() in calculator.py:
-
-(function_definition [11:4-15:21]
-  name: (identifier [11:8-11:11])
-  parameters: (parameters [11:11-11:35]
-    ...)
-  return_type: (type [11:39-11:44]
-    ...)
-  body: (block [12:8-15:21]
-    ...))
-```
-
-**Why it matters:** For debugging parser issues or understanding how tree-sitter sees a specific construct.
-
----
-
-### 15. `find_tests(file_path, symbol_name)`
+### 13. `find_tests(file_path, symbol_name)`
 
 What tests cover this function?
 
@@ -337,38 +293,11 @@ Found 3 tests
 
 ---
 
-### 16. `get_variables(file_path, function_name)`
-
-What variables are inside a function?
-
-```
-Agent: get_variables("src/codetree/indexer.py", "build")
-
-Returns:
-Variables in build() in src/codetree/indexer.py:
-
-Parameters:
-  self → line 25
-  cached_mtimes: dict → line 25
-
-Local variables:
-  py_file → line 27
-  rel_path: str → line 28
-  entry → line 35
-
-Loop variables:
-  py_file → line 27
-```
-
-**Why it matters:** Agent understands the data flowing through a function without reading the body.
-
----
-
 ## Group 5: Onboarding & Graph (4 tools)
 
 *"I just landed in this repo. Where do I start?"*
 
-### 17. `index_status()`
+### 14. `index_status()`
 
 Is the graph up to date?
 
@@ -387,7 +316,7 @@ Returns:
 
 ---
 
-### 18. `get_repository_map(max_items?)`
+### 15. `get_repository_map(max_items?)`
 
 The "onboarding" tool — one call gives the agent a complete overview.
 
@@ -413,7 +342,7 @@ Returns:
 
 ---
 
-### 19. `resolve_symbol(query, kind?, path_hint?, limit?)`
+### 16. `resolve_symbol(query, kind?, path_hint?, limit?)`
 
 "I see `add` mentioned. Which `add`?"
 
@@ -435,7 +364,7 @@ Returns:
 
 ---
 
-### 20. `search_graph(query?, kind?, file_pattern?, relationship?, direction?, min_degree?, max_degree?, limit?, offset?)`
+### 17. `search_graph(query?, kind?, file_pattern?, relationship?, direction?, min_degree?, max_degree?, limit?, offset?)`
 
 Graph-powered search with connectivity filters.
 
@@ -456,11 +385,11 @@ Returns:
 
 ---
 
-## Group 6: Change & Dataflow (3 tools)
+## Group 6: Change, Dataflow & Git (6 tools)
 
-*"What breaks if I change this? Is this function secure?"*
+*"What breaks if I change this? Is this function secure? What changed recently?"*
 
-### 21. `get_change_impact(symbol_query?, diff_scope?, depth?)`
+### 18. `get_change_impact(symbol_query?, diff_scope?, depth?)`
 
 Risk analysis before making changes.
 
@@ -488,12 +417,14 @@ Returns:
 
 ---
 
-### 22. `get_dataflow(file_path, function_name)`
+### 19. `analyze_dataflow(file_path, function_name, mode?, depth?)`
 
-How does data flow through a function?
+Unified dataflow and security analysis. Three modes in one tool:
+
+**mode="flow"** (default) — How does data flow through a function?
 
 ```
-Agent: get_dataflow("app.py", "handle_request")
+Agent: analyze_dataflow("app.py", "handle_request")
 
 Returns:
 {
@@ -508,16 +439,10 @@ Returns:
 }
 ```
 
-**Why it matters:** Agent traces: "this variable came from user input, passed through `build_query`, and ended up in a database query."
-
----
-
-### 23. `get_taint_paths(file_path, function_name)`
-
-Is untrusted data reaching dangerous operations?
+**mode="taint"** — Is untrusted data reaching dangerous operations?
 
 ```
-Agent: get_taint_paths("app.py", "handle_request")
+Agent: analyze_dataflow("app.py", "handle_request", mode="taint")
 
 Returns:
 {
@@ -532,17 +457,102 @@ Returns:
 }
 ```
 
-If the code had `query = sanitize(user_input)`, it would return:
-```json
-{
-  "verdict": "SAFE",
-  "chain": ["user_input", "query", "db.execute(query)"],
-  "sanitizer": "sanitize",
-  "risk": null
-}
+**mode="cross_taint"** — Cross-function taint tracing through call boundaries:
+
+```
+Agent: analyze_dataflow("app.py", "handle_request", mode="cross_taint", depth=3)
+
+Returns taint paths that follow data across function calls, up to the specified depth.
 ```
 
-**Why it matters:** Automated security review. Agent flags unsanitized paths from untrusted sources to dangerous sinks. Knows about common sanitizers (html.escape, parameterize, int/float casting) and gives SAFE/UNSAFE verdicts.
+**Why it matters:** One tool covers all dataflow needs. `flow` mode traces variable dependencies. `taint` mode flags unsanitized paths from untrusted sources to dangerous sinks. `cross_taint` mode follows taint across function boundaries. Knows about common sanitizers (html.escape, parameterize, int/float casting) and gives SAFE/UNSAFE verdicts.
+
+---
+
+### 20. `find_hot_paths(top_n?)`
+
+High-complexity functions that are also heavily called — the best optimization targets.
+
+```
+Agent: find_hot_paths(top_n=5)
+
+Returns:
+src/codetree/indexer.py:25 — build (complexity=8, callers=5, score=40)
+src/codetree/languages/python.py:30 — extract_skeleton (complexity=12, callers=3, score=36)
+```
+
+**Why it matters:** Agent identifies where optimization effort will have the greatest payoff — functions that are both complex and frequently called.
+
+---
+
+### 21. `get_dependency_graph(file_path?, format?)`
+
+File-level dependency graph showing which files import which.
+
+```
+Agent: get_dependency_graph(format="mermaid")
+
+Returns:
+graph LR
+  main.py --> calc.py
+  main.py --> utils.py
+  calc.py --> math_helpers.py
+```
+
+**Why it matters:** Agent sees the architectural structure — which modules depend on which, where circular dependencies exist.
+
+---
+
+### 22. `git_history(mode, file_path?, top_n?, since?, min_commits?)`
+
+Unified git history analysis. Three modes in one tool:
+
+**mode="blame"** — Per-line git blame with author summary:
+
+```
+Agent: git_history(mode="blame", file_path="src/codetree/server.py")
+
+Returns:
+line 1: author (commit, date) code
+line 2: author (commit, date) code
+...
+```
+
+**mode="churn"** — Most-changed files by commit count:
+
+```
+Agent: git_history(mode="churn", top_n=5)
+
+Returns:
+file (N commits, +A/-D lines)
+```
+
+**mode="coupling"** — Files that change together (temporal coupling):
+
+```
+Agent: git_history(mode="coupling", file_path="src/codetree/server.py", min_commits=3)
+
+Returns:
+a.py <-> b.py (N co-commits, ratio=0.8)
+```
+
+**Why it matters:** One tool for all git history questions. `blame` shows who wrote what. `churn` identifies hotspots that change frequently. `coupling` reveals hidden dependencies — files that always change together likely have a relationship worth understanding.
+
+---
+
+### 23. `suggest_docs(file_path?, symbol_name?)`
+
+Find undocumented functions with enough context to generate documentation.
+
+```
+Agent: suggest_docs("src/codetree/indexer.py")
+
+Returns:
+src/codetree/indexer.py:30 — _should_skip(path), calls: [is_hidden, match], callers: [build]
+src/codetree/indexer.py:40 — _register_file(path), calls: [get_plugin], callers: [build]
+```
+
+**Why it matters:** Agent finds functions that need docs and gets the context (what they call, who calls them) to write accurate docstrings without reading the full source.
 
 ---
 
@@ -558,18 +568,18 @@ If the code had `query = sanitize(user_input)`, it would return:
 | 6 | `find_references` | Who uses this symbol? |
 | 7 | `get_call_graph` | What does this call / what calls it? |
 | 8 | `get_blast_radius` | What breaks if I change this? |
-| 9 | `rank_symbols` | What's the most important code? |
-| 10 | `get_complexity` | How complex is this function? |
-| 11 | `find_dead_code` | What code is never used? |
-| 12 | `detect_clones` | What code is duplicated? |
-| 13 | `search_symbols` | Find symbols by name/type/parent/doc/complexity |
-| 14 | `get_ast` | Raw parse tree inspection |
-| 15 | `find_tests` | What tests cover this function? |
-| 16 | `get_variables` | What variables are in this function? |
-| 17 | `index_status` | Is the graph up to date? |
-| 18 | `get_repository_map` | One-call repo overview for onboarding |
-| 19 | `resolve_symbol` | Which "add" do you mean? |
-| 20 | `search_graph` | Graph search with connectivity filters |
-| 21 | `get_change_impact` | Risk analysis before changes |
-| 22 | `get_dataflow` | Variable dependency tracing |
-| 23 | `get_taint_paths` | Security taint analysis |
+| 9 | `get_complexity` | How complex is this function? |
+| 10 | `find_dead_code` | What code is never used? |
+| 11 | `detect_clones` | What code is duplicated? |
+| 12 | `search_symbols` | Find symbols by name/type/parent/doc/complexity |
+| 13 | `find_tests` | What tests cover this function? |
+| 14 | `index_status` | Is the graph up to date? |
+| 15 | `get_repository_map` | One-call repo overview for onboarding |
+| 16 | `resolve_symbol` | Which "add" do you mean? |
+| 17 | `search_graph` | Graph search with connectivity filters |
+| 18 | `get_change_impact` | Risk analysis before changes |
+| 19 | `analyze_dataflow` | Variable flow, taint analysis, cross-function taint |
+| 20 | `find_hot_paths` | High-complexity, high-call-count optimization targets |
+| 21 | `get_dependency_graph` | File-level dependency graph as Mermaid or list |
+| 22 | `git_history` | Git blame, churn, and change coupling |
+| 23 | `suggest_docs` | Find undocumented functions with context |

@@ -341,25 +341,6 @@ def create_server(root: str) -> FastMCP:
         return "\n".join(lines)
 
     @mcp.tool()
-    def get_ast(file_path: str, symbol_name: str | None = None, max_depth: int = -1) -> str:
-        """Get the raw AST (abstract syntax tree) of a file or symbol as an S-expression.
-
-        Args:
-            file_path: path relative to the repo root
-            symbol_name: optional — if given, show AST for just this symbol
-            max_depth: optional — limit tree depth (-1 = unlimited, 0 = root only)
-        """
-        if file_path not in indexer._index:
-            return f"File not found: {file_path}"
-        result = indexer.get_ast(file_path, symbol_name=symbol_name, max_depth=max_depth)
-        if result is None:
-            if symbol_name:
-                return f"Symbol '{symbol_name}' not found in {file_path}"
-            return f"Could not parse AST for {file_path}"
-        header = f"AST for {symbol_name + '() in ' if symbol_name else ''}{file_path}:"
-        return f"{header}\n\n{result}"
-
-    @mcp.tool()
     def detect_clones(file_path: str | None = None, min_lines: int = 5) -> str:
         """Find duplicate or near-duplicate functions in the repo.
 
@@ -462,65 +443,6 @@ def create_server(root: str) -> FastMCP:
         lines.append(f"\nFound {len(tests)} test{'s' if len(tests) != 1 else ''}")
         return "\n".join(lines)
 
-    @mcp.tool()
-    def get_variables(file_path: str, function_name: str) -> str:
-        """Get local variables declared inside a function.
-
-        Shows parameters, local assignments, and loop variables with types when available.
-
-        Args:
-            file_path: path relative to the repo root
-            function_name: name of the function to inspect
-        """
-        if file_path not in indexer._index:
-            return f"File not found: {file_path}"
-        variables = indexer.get_variables(file_path, function_name)
-        if not variables:
-            return f"No variables found in {function_name}() in {file_path}."
-        lines = [f"Variables in {function_name}() in {file_path}:"]
-
-        # Group by kind
-        by_kind: dict[str, list] = {}
-        for v in variables:
-            by_kind.setdefault(v["kind"], []).append(v)
-
-        kind_labels = {"parameter": "Parameters", "local": "Local variables", "loop_var": "Loop variables"}
-        for kind in ("parameter", "local", "loop_var"):
-            items = by_kind.get(kind, [])
-            if not items:
-                continue
-            lines.append(f"\n{kind_labels[kind]}:")
-            for v in items:
-                type_info = f": {v['type']}" if v["type"] else ""
-                lines.append(f"  {v['name']}{type_info} → line {v['line']}")
-
-        return "\n".join(lines)
-
-    @mcp.tool()
-    def rank_symbols(top_n: int = 20, file_path: str | None = None) -> str:
-        """Rank symbols by importance using reference-based PageRank.
-
-        Returns the most central/important symbols in the codebase — useful for
-        understanding unfamiliar code. Heavily-referenced symbols rank highest.
-
-        Args:
-            top_n: number of top symbols to return (default 20)
-            file_path: optional — if given, only rank symbols in this file
-        """
-        if file_path and file_path not in indexer._index:
-            return f"File not found: {file_path}"
-        ranked = indexer.rank_symbols(top_n=top_n, file_path=file_path)
-        if not ranked:
-            scope = file_path if file_path else "the repo"
-            return f"No symbols found in {scope}."
-        lines = ["Symbol importance ranking:"]
-        for i, r in enumerate(ranked, 1):
-            score_pct = f"{r['score'] * 100:.1f}%"
-            lines.append(f"  {i}. {r['file']}: {r['type']} {r['name']} → line {r['line']}  (importance: {score_pct})")
-        scope = f" in {file_path}" if file_path else ""
-        lines.append(f"\nTop {len(ranked)} symbols{scope} by reference-based importance")
-        return "\n".join(lines)
-
     # ── Graph-backed onboarding tools ────────────────────────────────────────
 
     @mcp.tool()
@@ -620,70 +542,39 @@ def create_server(root: str) -> FastMCP:
             depth=depth,
         )
 
-    # ── Dataflow & taint analysis tools ──────────────────────────────────────
+    # ── Dataflow & taint analysis ────────────────────────────────────────────
 
     @mcp.tool()
-    def get_dataflow(file_path: str, function_name: str) -> dict:
-        """Get intra-function variable dataflow analysis.
-
-        Traces how data flows through variable assignments within a function.
-        Shows dependency chains, external sources, and dangerous sinks.
+    def analyze_dataflow(file_path: str, function_name: str,
+                         mode: str = "flow", depth: int = 3) -> dict:
+        """Analyze variable dataflow and security taint paths in a function.
 
         Args:
             file_path: path relative to the repo root
             function_name: name of the function to analyze
+            mode: "flow" (variable dataflow), "taint" (source→sink taint paths),
+                  or "cross_taint" (cross-function taint tracing)
+            depth: max cross-function depth for cross_taint mode (default 3)
         """
-        from .graph.dataflow import extract_dataflow
+        from .graph.dataflow import extract_dataflow, extract_taint_paths, extract_cross_function_taint
+
+        if mode == "cross_taint":
+            if file_path not in indexer._index:
+                return {"error": f"File not found: {file_path}"}
+            return extract_cross_function_taint(indexer, file_path, function_name, depth=depth)
 
         entry = indexer._index.get(file_path)
         if entry is None:
             return {"error": f"File not found: {file_path}"}
-        result = extract_dataflow(entry.plugin, entry.source, function_name)
+
+        if mode == "taint":
+            result = extract_taint_paths(entry.plugin, entry.source, function_name)
+        else:
+            result = extract_dataflow(entry.plugin, entry.source, function_name)
+
         if result is None:
             return {"error": f"Function '{function_name}' not found in {file_path}"}
         return result
-
-    @mcp.tool()
-    def get_taint_paths(file_path: str, function_name: str) -> dict:
-        """Analyze security taint paths from untrusted sources to dangerous sinks.
-
-        Traces whether user input (request data, env vars, file reads) reaches
-        sensitive operations (SQL queries, shell commands, eval) without passing
-        through a sanitizer.
-
-        Args:
-            file_path: path relative to the repo root
-            function_name: name of the function to analyze
-        """
-        from .graph.dataflow import extract_taint_paths
-
-        entry = indexer._index.get(file_path)
-        if entry is None:
-            return {"error": f"File not found: {file_path}"}
-        result = extract_taint_paths(entry.plugin, entry.source, function_name)
-        if result is None:
-            return {"error": f"Function '{function_name}' not found in {file_path}"}
-        return result
-
-    @mcp.tool()
-    def get_cross_function_taint(file_path: str, function_name: str,
-                                  depth: int = 3) -> dict:
-        """Trace taint paths across function call boundaries.
-
-        When tainted data flows into a function call, follows the argument
-        into the callee to see if it reaches a sink there. Recurses up to
-        `depth` levels deep.
-
-        Args:
-            file_path: path relative to the repo root
-            function_name: name of the entry function to analyze
-            depth: max cross-function depth (default 3)
-        """
-        from .graph.dataflow import extract_cross_function_taint
-
-        if file_path not in indexer._index:
-            return {"error": f"File not found: {file_path}"}
-        return extract_cross_function_taint(indexer, file_path, function_name, depth=depth)
 
     @mcp.tool()
     def find_hot_paths(top_n: int = 10) -> str:
@@ -724,76 +615,64 @@ def create_server(root: str) -> FastMCP:
         return result["content"] + summary
 
     @mcp.tool()
-    def get_blame(file_path: str) -> str:
-        """Get per-line git blame info showing who wrote each line.
-
-        Returns author summary and per-line attribution.
+    def git_history(mode: str = "blame", file_path: str | None = None,
+                    top_n: int = 20, since: str | None = None,
+                    min_commits: int = 3) -> str:
+        """Analyze git history: blame, churn, or change coupling.
 
         Args:
-            file_path: path relative to the repo root
+            mode: "blame" (per-line attribution), "churn" (most-changed files),
+                  or "coupling" (files that change together)
+            file_path: required for blame, optional filter for coupling
+            top_n: max results for churn/coupling (default 20)
+            since: date filter for churn (e.g., "6 months ago")
+            min_commits: minimum co-change count for coupling (default 3)
         """
         from .graph.git_analysis import get_blame as _get_blame
-
-        result = _get_blame(root, file_path)
-        if not result["lines"]:
-            return f"No blame data for {file_path} (file not in git or no commits)."
-        lines = [f"Blame for {file_path}:"]
-        lines.append(f"\nAuthors:")
-        for author, count in result["summary"]["authors"].items():
-            lines.append(f"  {author}: {count} lines")
-        lines.append(f"\nTotal: {result['summary']['total_lines']} lines")
-        return "\n".join(lines)
-
-    @mcp.tool()
-    def get_churn(top_n: int = 20, since: str | None = None) -> str:
-        """Get most frequently changed files in git history.
-
-        High-churn files are change hotspots — often where bugs live.
-
-        Args:
-            top_n: max results (default 20)
-            since: optional date filter (e.g., "6 months ago", "2024-01-01")
-        """
         from .graph.git_analysis import get_churn as _get_churn
-
-        results = _get_churn(root, top_n=top_n, since=since)
-        if not results:
-            return "No churn data found (no git history or no matching files)."
-        lines = ["File churn (most changed files):"]
-        for i, r in enumerate(results, 1):
-            lines.append(
-                f"  {i}. {r['file']}  ({r['commits']} commits, "
-                f"+{r['additions']}/-{r['deletions']})"
-            )
-        lines.append(f"\nTop {len(results)} most-changed files")
-        return "\n".join(lines)
-
-    @mcp.tool()
-    def get_change_coupling(file_path: str | None = None,
-                             top_n: int = 10, min_commits: int = 3) -> str:
-        """Find files that frequently change together (temporal coupling).
-
-        Files with high coupling may have hidden dependencies or should be
-        refactored to reduce coupling.
-
-        Args:
-            file_path: optional — show coupling for this file only
-            top_n: max results (default 10)
-            min_commits: minimum co-change count to report (default 3)
-        """
         from .graph.git_analysis import get_change_coupling as _get_change_coupling
 
-        results = _get_change_coupling(root, file_path=file_path, top_n=top_n, min_commits=min_commits)
-        if not results:
-            return "No change coupling found (not enough co-changing files)."
-        lines = ["Change coupling (files that change together):"]
-        for r in results:
-            lines.append(
-                f"  {r['file_a']} ↔ {r['file_b']}  "
-                f"({r['co_commits']} co-commits, coupling={r['coupling_ratio']})"
-            )
-        lines.append(f"\n{len(results)} coupled file pairs")
-        return "\n".join(lines)
+        if mode == "blame":
+            if not file_path:
+                return "file_path is required for blame mode."
+            result = _get_blame(root, file_path)
+            if not result["lines"]:
+                return f"No blame data for {file_path} (file not in git or no commits)."
+            lines = [f"Blame for {file_path}:"]
+            lines.append(f"\nAuthors:")
+            for author, count in result["summary"]["authors"].items():
+                lines.append(f"  {author}: {count} lines")
+            lines.append(f"\nTotal: {result['summary']['total_lines']} lines")
+            return "\n".join(lines)
+
+        elif mode == "churn":
+            results = _get_churn(root, top_n=top_n, since=since)
+            if not results:
+                return "No churn data found (no git history or no matching files)."
+            lines = ["File churn (most changed files):"]
+            for i, r in enumerate(results, 1):
+                lines.append(
+                    f"  {i}. {r['file']}  ({r['commits']} commits, "
+                    f"+{r['additions']}/-{r['deletions']})"
+                )
+            lines.append(f"\nTop {len(results)} most-changed files")
+            return "\n".join(lines)
+
+        elif mode == "coupling":
+            results = _get_change_coupling(root, file_path=file_path, top_n=top_n, min_commits=min_commits)
+            if not results:
+                return "No change coupling found (not enough co-changing files)."
+            lines = ["Change coupling (files that change together):"]
+            for r in results:
+                lines.append(
+                    f"  {r['file_a']} ↔ {r['file_b']}  "
+                    f"({r['co_commits']} co-commits, coupling={r['coupling_ratio']})"
+                )
+            lines.append(f"\n{len(results)} coupled file pairs")
+            return "\n".join(lines)
+
+        else:
+            return f"Unknown mode '{mode}'. Use 'blame', 'churn', or 'coupling'."
 
     @mcp.tool()
     def suggest_docs(file_path: str | None = None,
