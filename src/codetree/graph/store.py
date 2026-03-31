@@ -59,7 +59,7 @@ class GraphStore:
 
     def open(self):
         self._db_path.parent.mkdir(parents=True, exist_ok=True)
-        self._conn = sqlite3.connect(str(self._db_path))
+        self._conn = sqlite3.connect(str(self._db_path), check_same_thread=False)
         self._conn.execute("PRAGMA journal_mode=WAL")
         self._conn.execute("PRAGMA foreign_keys=ON")
         self._conn.executescript(_SCHEMA_SQL)
@@ -94,6 +94,8 @@ class GraphStore:
 
     def execute(self, sql: str, params: tuple = ()) -> sqlite3.Cursor:
         """Execute a SQL query and return the cursor. Public API for queries."""
+        if self._conn is None:
+            self.open()
         return self._conn.execute(sql, params)
 
     # -- Meta --------------------------------------------------------------
