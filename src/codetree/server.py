@@ -37,6 +37,9 @@ def create_server(root: str) -> FastMCP:
                         mtime=mtime,
                     )
 
+    # Rebuild definition index once after all injections (DATA-01, DATA-02, DATA-03 fix)
+    indexer._rebuild_definitions()
+
     # Save updated cache
     for rel_path, file_entry in indexer._index.items():
         cache.set(rel_path, {
