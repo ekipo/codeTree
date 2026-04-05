@@ -8,6 +8,20 @@ def create_server(root: str) -> FastMCP:
     mcp = FastMCP("codetree")
     root_path = Path(root)
 
+    def _validate_path(file_path: str | None, _root: Path = root_path) -> str | None:
+        """Return an error string if file_path escapes the repo root, else None."""
+        if not file_path:
+            return None  # Optional paths — let downstream handle None/empty
+        # Reject absolute paths immediately (OS-specific safety before resolve)
+        if Path(file_path).is_absolute():
+            return f"Error: path '{file_path}' must be relative to the repo root — access denied"
+        try:
+            candidate = (_root / file_path).resolve()
+            candidate.relative_to(_root.resolve())
+            return None  # Within bounds
+        except ValueError:
+            return f"Error: path '{file_path}' is outside the repo root — access denied"
+
     # Load cache
     cache = Cache(root)
     cache.load()
@@ -119,6 +133,8 @@ def create_server(root: str) -> FastMCP:
             file_path: path relative to the repo root (e.g., "src/main.py" or "calculator.py")
             format: "full" (default, verbose, includes syntax warnings) or "compact" (abbreviated, fewer tokens, no syntax warnings)
         """
+        if err := _validate_path(file_path):
+            return err
         skeleton = indexer.get_skeleton(file_path)
         if not skeleton:
             return f"File not found or empty: {file_path}"
@@ -135,6 +151,8 @@ def create_server(root: str) -> FastMCP:
             file_path: path relative to the repo root (e.g., "src/main.py" or "calculator.py")
             symbol_name: name of the function or class to retrieve
         """
+        if err := _validate_path(file_path):
+            return err
         result = indexer.get_symbol(file_path, symbol_name)
         if result is None:
             return f"Symbol '{symbol_name}' not found in {file_path}"
@@ -169,6 +187,8 @@ def create_server(root: str) -> FastMCP:
             Callee names listed under "calls" can be located with
             find_references(symbol_name) to find where they are defined.
         """
+        if err := _validate_path(file_path):
+            return err
         graph = indexer.get_call_graph(file_path, function_name)
         lines = [f"Call graph for '{function_name}':"]
 
@@ -195,6 +215,8 @@ def create_server(root: str) -> FastMCP:
         Args:
             file_path: path relative to the repo root (e.g., "src/main.py" or "calculator.py")
         """
+        if err := _validate_path(file_path):
+            return err
         entry = indexer._index.get(file_path)
         if entry is None:
             return f"File not found: {file_path}"
@@ -219,6 +241,10 @@ def create_server(root: str) -> FastMCP:
         parts = []
         for fp in file_paths:
             parts.append(f"=== {fp} ===")
+            if err := _validate_path(fp):
+                parts.append(err)
+                parts.append("")
+                continue
             skeleton = indexer.get_skeleton(fp)
             if not skeleton:
                 parts.append(f"File not found or empty: {fp}")
@@ -243,6 +269,11 @@ def create_server(root: str) -> FastMCP:
         for item in symbols:
             fp = item.get("file_path", "")
             name = item.get("symbol_name", "")
+            if err := _validate_path(fp):
+                parts.append(f"=== {fp} ===")
+                parts.append(err)
+                parts.append("")
+                continue
             result = indexer.get_symbol(fp, name)
             if result is None:
                 parts.append(f"Symbol '{name}' not found in {fp}")
@@ -259,6 +290,8 @@ def create_server(root: str) -> FastMCP:
             file_path: path relative to the repo root (e.g., "src/main.py" or "calculator.py")
             function_name: name of the function to analyze
         """
+        if err := _validate_path(file_path):
+            return err
         entry = indexer._index.get(file_path)
         if entry is None:
             return f"File not found: {file_path}"
@@ -279,6 +312,9 @@ def create_server(root: str) -> FastMCP:
         Args:
             file_path: optional — if given, only check this file. Otherwise scans entire repo.
         """
+        if file_path is not None:
+            if err := _validate_path(file_path):
+                return err
         if file_path and file_path not in indexer._index:
             return f"File not found: {file_path}"
         dead = indexer.find_dead_code(file_path=file_path)
@@ -309,6 +345,8 @@ def create_server(root: str) -> FastMCP:
             file_path: path relative to the repo root
             symbol_name: name of the function/method to analyze
         """
+        if err := _validate_path(file_path):
+            return err
         if file_path not in indexer._index:
             return f"File not found: {file_path}"
         result = indexer.get_blast_radius(file_path, symbol_name)
@@ -350,6 +388,9 @@ def create_server(root: str) -> FastMCP:
             file_path: optional — if given, find clones of functions in this file.
             min_lines: minimum function line count to consider (default 5).
         """
+        if file_path is not None:
+            if err := _validate_path(file_path):
+                return err
         clones = indexer.detect_clones(file_path=file_path, min_lines=min_lines)
         if not clones:
             scope = file_path if file_path else "the repo"
@@ -432,6 +473,8 @@ def create_server(root: str) -> FastMCP:
             file_path: path relative to the repo root
             symbol_name: name of the function/class to find tests for
         """
+        if err := _validate_path(file_path):
+            return err
         if file_path not in indexer._index:
             return f"File not found: {file_path}"
         tests = indexer.find_tests(file_path, symbol_name)
@@ -558,6 +601,9 @@ def create_server(root: str) -> FastMCP:
         """
         from .graph.dataflow import extract_dataflow, extract_taint_paths, extract_cross_function_taint
 
+        if err := _validate_path(file_path):
+            return {"error": err}
+
         if mode == "cross_taint":
             if file_path not in indexer._index:
                 return {"error": f"File not found: {file_path}"}
@@ -610,6 +656,9 @@ def create_server(root: str) -> FastMCP:
             file_path: optional — show only dependencies involving this file
             format: "mermaid" (default, Mermaid.js flowchart) or "list"
         """
+        if file_path is not None:
+            if err := _validate_path(file_path):
+                return err
         result = graph_queries.get_dependency_graph(file_path=file_path, format=format)
         summary = f"\n\n{result['nodes']} files, {result['edges']} import edges"
         return result["content"] + summary
@@ -631,6 +680,10 @@ def create_server(root: str) -> FastMCP:
         from .graph.git_analysis import get_blame as _get_blame
         from .graph.git_analysis import get_churn as _get_churn
         from .graph.git_analysis import get_change_coupling as _get_change_coupling
+
+        if file_path is not None:
+            if err := _validate_path(file_path):
+                return err
 
         if mode == "blame":
             if not file_path:
@@ -683,6 +736,9 @@ def create_server(root: str) -> FastMCP:
             file_path: optional — scope to a specific file
             symbol_name: optional — scope to a specific symbol name
         """
+        if file_path is not None:
+            if err := _validate_path(file_path):
+                return err
         results = graph_queries.suggest_docs(indexer, file_path=file_path, symbol_name=symbol_name)
         if not results:
             return "No undocumented functions found."
