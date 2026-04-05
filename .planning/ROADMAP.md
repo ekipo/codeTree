@@ -36,11 +36,15 @@ Plans:
   3. When two files both define a function named `add()`, find_references("add") and find_dead_code() distinguish between them by file-qualified lookup
   4. A plugin that raises an unexpected exception during extract_skeleton() causes that file to be skipped with has_errors=True, and the server continues indexing remaining files
   5. All existing 1070+ tests continue to pass after the fixes
-**Plans**: TBD
+**Plans**: 2 plans
+
+Plans:
+- [ ] 02-01-PLAN.md — Fix _definitions: qualified keys, no duplicates, no ghost symbols (DATA-01, DATA-02, DATA-03)
+- [ ] 02-02-PLAN.md — Wrap extract_skeleton() in try/except; plugin crash protection (ROBUST-01)
 
 ## Progress
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 1. Critical Safety | 2/2 | Complete | 2026-04-05 |
-| 2. Data Integrity | 0/? | Not started | - |
+| 2. Data Integrity | 0/2 | Not started | - |
