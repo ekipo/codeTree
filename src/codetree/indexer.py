@@ -53,6 +53,7 @@ class Indexer:
         "__pycache__", ".git", ".hg", ".svn",
         "node_modules", ".tox", ".mypy_cache",
         ".pytest_cache", "dist", "build",
+        ".codetree",
     }
 
     def _should_skip(self, path: Path) -> bool:
@@ -111,8 +112,15 @@ class Indexer:
             if cached_mtimes.get(rel) == mtime:
                 continue
             source = candidate.read_bytes()
-            skeleton = plugin.extract_skeleton(source)
-            has_errors = plugin.check_syntax(source)
+            try:
+                skeleton = plugin.extract_skeleton(source)
+                has_errors = plugin.check_syntax(source)
+            except Exception:
+                # ROBUST-01: Plugin crash (any exception) skips this file gracefully.
+                # File is still added to _index with empty skeleton and has_errors=True
+                # so tools that check entry.has_errors can warn the caller.
+                skeleton = []
+                has_errors = True
             self._index[rel] = FileEntry(
                 path=candidate,
                 source=source,
