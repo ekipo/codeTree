@@ -18,13 +18,14 @@ Every MCP tool call returns correct, trustworthy data — agents can rely on cod
 - ✓ MCP registration removed hardcoded `--root` — existing (fixed 2026-04-03)
 - ✓ SQLite GraphStore is thread-safe for concurrent MCP tool calls — Phase 1 (2026-04-05)
 - ✓ All tool `file_path` inputs are validated against path traversal — Phase 1 (2026-04-05)
+- ✓ Definition index has no duplicates after cache injection — Phase 2 (2026-04-05)
+- ✓ Stale definitions from deleted files are cleaned up — Phase 2 (2026-04-05)
+- ✓ Symbol resolution uses qualified names, not bare names — Phase 2 (2026-04-05)
+- ✓ Plugin errors during indexing don't crash the server — Phase 2 (2026-04-05)
 
 ### Active
 
-- [ ] Definition index has no duplicates after cache injection (CONCERNS #2)
-- [ ] Stale definitions from deleted files are cleaned up (CONCERNS #3)
-- [ ] Symbol resolution uses qualified names, not bare names (CONCERNS #9)
-- [ ] Plugin errors during indexing don't crash the server (CONCERNS #14)
+(All v1 requirements validated)
 
 ### Out of Scope
 
@@ -71,4 +72,4 @@ This document evolves at phase transitions and milestone boundaries.
 5. "What This Is" still accurate? → Update if drifted
 
 ---
-*Last updated: 2026-04-05 after Phase 1 completion*
+*Last updated: 2026-04-05 after Phase 2 completion — all v1 requirements validated*
