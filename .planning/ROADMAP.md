@@ -23,7 +23,7 @@ Two phases deliver the full hardening effort. Phase 1 eliminates the critical ri
 **Plans**: 2 plans
 
 Plans:
-- [ ] 01-01-PLAN.md — Add threading.Lock to GraphStore; concurrent-access regression tests
+- [x] 01-01-PLAN.md — Add threading.Lock to GraphStore; concurrent-access regression tests
 - [ ] 01-02-PLAN.md — Add _validate_path to all file_path tools; path traversal regression tests
 
 ### Phase 2: Data Integrity

@@ -7,8 +7,8 @@
 
 ### Concurrency
 
-- [ ] **CONC-01**: GraphStore protects SQLite connection with threading lock so concurrent MCP tool calls don't corrupt data
-- [ ] **CONC-02**: GraphStore transaction flag (`_in_transaction`) is thread-safe
+- [x] **CONC-01**: GraphStore protects SQLite connection with threading lock so concurrent MCP tool calls don't corrupt data
+- [x] **CONC-02**: GraphStore transaction flag (`_in_transaction`) is thread-safe
 
 ### Security
 
@@ -59,8 +59,8 @@
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| CONC-01 | Phase 1 | Pending |
-| CONC-02 | Phase 1 | Pending |
+| CONC-01 | Phase 1 | Complete |
+| CONC-02 | Phase 1 | Complete |
 | SEC-01 | Phase 1 | Pending |
 | DATA-01 | Phase 2 | Pending |
 | DATA-02 | Phase 2 | Pending |
