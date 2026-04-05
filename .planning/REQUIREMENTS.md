@@ -16,9 +16,9 @@
 
 ### Data Correctness
 
-- [ ] **DATA-01**: `inject_cached()` does not create duplicate entries in `_definitions` index
-- [ ] **DATA-02**: Definitions from deleted files are cleaned up after cache injection (no ghost symbols)
-- [ ] **DATA-03**: `find_references()` and `find_dead_code()` use file-qualified lookups to avoid name collisions across files
+- [x] **DATA-01**: `inject_cached()` does not create duplicate entries in `_definitions` index
+- [x] **DATA-02**: Definitions from deleted files are cleaned up after cache injection (no ghost symbols)
+- [x] **DATA-03**: `find_references()` and `find_dead_code()` use file-qualified lookups to avoid name collisions across files
 
 ### Robustness
 
@@ -62,9 +62,9 @@
 | CONC-01 | Phase 1 | Complete |
 | CONC-02 | Phase 1 | Complete |
 | SEC-01 | Phase 1 | Complete |
-| DATA-01 | Phase 2 | Pending |
-| DATA-02 | Phase 2 | Pending |
-| DATA-03 | Phase 2 | Pending |
+| DATA-01 | Phase 2 | Complete |
+| DATA-02 | Phase 2 | Complete |
+| DATA-03 | Phase 2 | Complete |
 | ROBUST-01 | Phase 2 | Pending |
 
 **Coverage:**
