@@ -1,0 +1,77 @@
+# Requirements: codetree Production Hardening
+
+**Defined:** 2026-04-05
+**Core Value:** Every MCP tool call returns correct, trustworthy data
+
+## v1 Requirements
+
+### Concurrency
+
+- [ ] **CONC-01**: GraphStore protects SQLite connection with threading lock so concurrent MCP tool calls don't corrupt data
+- [ ] **CONC-02**: GraphStore transaction flag (`_in_transaction`) is thread-safe
+
+### Security
+
+- [ ] **SEC-01**: All tools that accept `file_path` validate the path stays within repo root (no `..` traversal, no absolute paths)
+
+### Data Correctness
+
+- [ ] **DATA-01**: `inject_cached()` does not create duplicate entries in `_definitions` index
+- [ ] **DATA-02**: Definitions from deleted files are cleaned up after cache injection (no ghost symbols)
+- [ ] **DATA-03**: `find_references()` and `find_dead_code()` use file-qualified lookups to avoid name collisions across files
+
+### Robustness
+
+- [ ] **ROBUST-01**: Plugin errors during `extract_skeleton()` are caught — server continues with empty skeleton and `has_errors=True` instead of crashing
+
+## v2 Requirements
+
+### Silent Failures
+
+- **SILENT-01**: Tools return error messages instead of empty lists when queries fail
+- **SILENT-02**: `git_history()` returns descriptive error when run on non-git repos
+
+### Cache Integrity
+
+- **CACHE-01**: Cache validation uses content hash in addition to mtime
+- **CACHE-02**: Atomic cache writes (write to temp file, then rename)
+
+### Schema
+
+- **SCHEMA-01**: GraphStore enforces schema version compatibility on open
+
+### Performance
+
+- **PERF-01**: `find_references()` uses indexed lookup instead of full repo scan
+
+## Out of Scope
+
+| Feature | Reason |
+|---------|--------|
+| Taint analysis completeness (#19) | Feature enhancement, not a correctness bug |
+| Complexity for all languages (#22) | Feature gap, not user-facing bug |
+| Type hints (#27) | Code quality, no runtime impact |
+| Error message standardization (#25) | Cosmetic, agents handle varied formats |
+| Dead code in `__init__.py` (#17) | Design choice, not a bug |
+| Hash algorithm versioning (#16) | Theoretical concern, no planned algorithm change |
+
+## Traceability
+
+| Requirement | Phase | Status |
+|-------------|-------|--------|
+| CONC-01 | — | Pending |
+| CONC-02 | — | Pending |
+| SEC-01 | — | Pending |
+| DATA-01 | — | Pending |
+| DATA-02 | — | Pending |
+| DATA-03 | — | Pending |
+| ROBUST-01 | — | Pending |
+
+**Coverage:**
+- v1 requirements: 7 total
+- Mapped to phases: 0
+- Unmapped: 7 (awaiting roadmap)
+
+---
+*Requirements defined: 2026-04-05*
+*Last updated: 2026-04-05 after initial definition*
