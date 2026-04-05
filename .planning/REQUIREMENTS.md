@@ -22,7 +22,7 @@
 
 ### Robustness
 
-- [ ] **ROBUST-01**: Plugin errors during `extract_skeleton()` are caught — server continues with empty skeleton and `has_errors=True` instead of crashing
+- [x] **ROBUST-01**: Plugin errors during `extract_skeleton()` are caught — server continues with empty skeleton and `has_errors=True` instead of crashing
 
 ## v2 Requirements
 
@@ -65,7 +65,7 @@
 | DATA-01 | Phase 2 | Complete |
 | DATA-02 | Phase 2 | Complete |
 | DATA-03 | Phase 2 | Complete |
-| ROBUST-01 | Phase 2 | Pending |
+| ROBUST-01 | Phase 2 | Complete |
 
 **Coverage:**
 - v1 requirements: 7 total

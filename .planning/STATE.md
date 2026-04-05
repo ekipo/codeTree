@@ -2,15 +2,15 @@
 gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
-status: executing
-stopped_at: Completed 02-data-integrity-02-01-PLAN.md
-last_updated: "2026-04-05T14:13:09.417Z"
+status: verifying
+stopped_at: Completed 02-data-integrity-02-02-PLAN.md
+last_updated: "2026-04-05T14:18:27.557Z"
 last_activity: 2026-04-05
 progress:
   total_phases: 2
-  completed_phases: 1
+  completed_phases: 2
   total_plans: 4
-  completed_plans: 3
+  completed_plans: 4
   percent: 50
 ---
 
@@ -27,7 +27,7 @@ See: .planning/PROJECT.md (updated 2026-04-05)
 
 Phase: 02 (data-integrity) — EXECUTING
 Plan: 2 of 2
-Status: Ready to execute
+Status: Phase complete — ready for verification
 Last activity: 2026-04-05
 
 Progress: [█████░░░░░] 50%
@@ -54,6 +54,7 @@ Progress: [█████░░░░░] 50%
 *Updated after each plan completion*
 | Phase 01-critical-safety P01 | 3 | 2 tasks | 2 files |
 | Phase 02-data-integrity P01 | 309 | 2 tasks | 4 files |
+| Phase 02-data-integrity P02 | 2 | 2 tasks | 2 files |
 
 ## Accumulated Context
 
@@ -71,6 +72,8 @@ Recent decisions affecting current work:
 - [Phase 01-02]: Empty/None file_path returns None from _validate_path (no error) — downstream handles not-found semantics
 - [Phase 01-02]: analyze_dataflow returns dict error, other tools return str error — matches each tool's existing error convention
 - [Phase 02-data-integrity]: Qualified keys use 'rel_path::symbol_name' format — consistent with graph layer; secondary index _name_to_qualified enables O(1) callee resolution; inject_cached() no longer touches _definitions
+- [Phase 02-data-integrity]: except Exception (not BaseException): MemoryError is subclass of Exception in Python 3 — catches all standard crashes while preserving KeyboardInterrupt/SystemExit
+- [Phase 02-data-integrity]: Crashing file kept in _index with has_errors=True and skeleton=[] — consistent with syntax error convention, allows callers to detect and report the problem
 
 ### Pending Todos
 
@@ -82,6 +85,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-04-05T14:13:09.415Z
-Stopped at: Completed 02-data-integrity-02-01-PLAN.md
+Last session: 2026-04-05T14:18:27.555Z
+Stopped at: Completed 02-data-integrity-02-02-PLAN.md
 Resume file: None

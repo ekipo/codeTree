@@ -40,7 +40,7 @@ Plans:
 
 Plans:
 - [x] 02-01-PLAN.md — Fix _definitions: qualified keys, no duplicates, no ghost symbols (DATA-01, DATA-02, DATA-03)
-- [ ] 02-02-PLAN.md — Wrap extract_skeleton() in try/except; plugin crash protection (ROBUST-01)
+- [x] 02-02-PLAN.md — Wrap extract_skeleton() in try/except; plugin crash protection (ROBUST-01)
 
 ## Progress
 
