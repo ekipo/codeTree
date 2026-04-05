@@ -6,7 +6,7 @@ Two phases deliver the full hardening effort. Phase 1 eliminates the critical ri
 
 ## Phases
 
-- [ ] **Phase 1: Critical Safety** - Thread-safe SQLite and path traversal validation for all tool inputs
+- [x] **Phase 1: Critical Safety** - Thread-safe SQLite and path traversal validation for all tool inputs
 - [ ] **Phase 2: Data Integrity** - Correct definition index (no duplicates, no ghosts, qualified names) and plugin crash protection
 
 ## Phase Details
@@ -24,7 +24,7 @@ Two phases deliver the full hardening effort. Phase 1 eliminates the critical ri
 
 Plans:
 - [x] 01-01-PLAN.md — Add threading.Lock to GraphStore; concurrent-access regression tests
-- [ ] 01-02-PLAN.md — Add _validate_path to all file_path tools; path traversal regression tests
+- [x] 01-02-PLAN.md — Add _validate_path to all file_path tools; path traversal regression tests
 
 ### Phase 2: Data Integrity
 **Goal**: The definition index reflects only current files with unique, qualified symbols, and plugin errors do not crash the server
@@ -42,5 +42,5 @@ Plans:
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. Critical Safety | 0/2 | Planned | - |
+| 1. Critical Safety | 2/2 | Complete | 2026-04-05 |
 | 2. Data Integrity | 0/? | Not started | - |

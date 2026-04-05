@@ -12,7 +12,7 @@
 
 ### Security
 
-- [ ] **SEC-01**: All tools that accept `file_path` validate the path stays within repo root (no `..` traversal, no absolute paths)
+- [x] **SEC-01**: All tools that accept `file_path` validate the path stays within repo root (no `..` traversal, no absolute paths)
 
 ### Data Correctness
 
@@ -61,7 +61,7 @@
 |-------------|-------|--------|
 | CONC-01 | Phase 1 | Complete |
 | CONC-02 | Phase 1 | Complete |
-| SEC-01 | Phase 1 | Pending |
+| SEC-01 | Phase 1 | Complete |
 | DATA-01 | Phase 2 | Pending |
 | DATA-02 | Phase 2 | Pending |
 | DATA-03 | Phase 2 | Pending |
