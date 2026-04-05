@@ -10,14 +10,17 @@ class TestDefinitionIndex:
     def test_definitions_built_from_skeleton(self, sample_repo):
         indexer = Indexer(str(sample_repo))
         indexer.build()
-        assert "Calculator" in indexer._definitions
-        assert "helper" in indexer._definitions
-        assert "run" in indexer._definitions
+        # _definitions now uses qualified "file::name" keys (DATA-03 fix)
+        all_names = {key.split("::", 1)[1] for key in indexer._definitions}
+        assert "Calculator" in all_names
+        assert "helper" in all_names
+        assert "run" in all_names
 
     def test_definitions_contain_file_and_line(self, sample_repo):
         indexer = Indexer(str(sample_repo))
         indexer.build()
-        defs = indexer._definitions["Calculator"]
+        # Use qualified key: "calculator.py::Calculator"
+        defs = indexer._definitions["calculator.py::Calculator"]
         assert len(defs) == 1
         assert defs[0][0] == "calculator.py"  # file
         assert isinstance(defs[0][1], int)     # line
@@ -27,13 +30,18 @@ class TestDefinitionIndex:
         (tmp_path / "b.py").write_text("def foo(): pass\n")
         indexer = Indexer(str(tmp_path))
         indexer.build()
-        assert len(indexer._definitions["foo"]) == 2
+        # DATA-03 fix: separate qualified keys instead of merged bare-name entry
+        assert "a.py::foo" in indexer._definitions
+        assert "b.py::foo" in indexer._definitions
+        assert len(indexer._definitions["a.py::foo"]) == 1
+        assert len(indexer._definitions["b.py::foo"]) == 1
 
     def test_methods_included(self, sample_repo):
         indexer = Indexer(str(sample_repo))
         indexer.build()
-        assert "add" in indexer._definitions
-        assert "divide" in indexer._definitions
+        # _definitions uses qualified keys; check via _name_to_qualified
+        assert "add" in indexer._name_to_qualified
+        assert "divide" in indexer._name_to_qualified
 
 
 from codetree.server import create_server

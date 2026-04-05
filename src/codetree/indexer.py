@@ -36,6 +36,10 @@ class Indexer:
         self.root = Path(root)
         self._index: dict[str, FileEntry] = {}
         self._definitions: dict[str, list[tuple[str, int]]] = {}
+        # Keys are "rel_path::symbol_name" to prevent name collisions across files.
+        self._name_to_qualified: dict[str, list[str]] = {}
+        # Maps bare symbol name → list of qualified keys. Built by _rebuild_definitions().
+        # Used by _ensure_call_graph() for O(1) callee resolution.
         self._call_graph: dict[str, set[str]] = {}
         self._reverse_graph: dict[str, set[str]] = {}
         self._call_graph_built: bool = False
@@ -58,6 +62,32 @@ class Indexer:
             if part.endswith(".egg-info"):
                 return True
         return False
+
+    def _rebuild_definitions(self) -> None:
+        """Rebuild _definitions from current _index using qualified (file::name) keys.
+
+        Called after build() and after all inject_cached() calls to ensure:
+        - DATA-01: No duplicates from files both built and injected.
+        - DATA-02: No ghost entries from files no longer in _index.
+        - DATA-03: Qualified keys prevent name collision across files.
+
+        Also rebuilds _name_to_qualified secondary index for O(1) callee lookup
+        in _ensure_call_graph().
+        """
+        self._definitions = {}
+        self._name_to_qualified = {}
+        for rel_path, entry in self._index.items():
+            for item in entry.skeleton:
+                key = f"{rel_path}::{item['name']}"
+                if key not in self._definitions:
+                    self._definitions[key] = []
+                self._definitions[key].append((rel_path, item["line"]))
+                # Secondary index: bare name → qualified keys
+                bare = item["name"]
+                if bare not in self._name_to_qualified:
+                    self._name_to_qualified[bare] = []
+                if key not in self._name_to_qualified[bare]:
+                    self._name_to_qualified[bare].append(key)
 
     def build(self, cached_mtimes: dict[str, float] | None = None):
         """Index all supported files under root, skipping non-project dirs.
@@ -93,14 +123,8 @@ class Indexer:
                 has_errors=has_errors,
             )
 
-        # Build definition index from skeleton data
-        self._definitions = {}
-        for rel_path, entry in self._index.items():
-            for item in entry.skeleton:
-                name = item["name"]
-                if name not in self._definitions:
-                    self._definitions[name] = []
-                self._definitions[name].append((rel_path, item["line"]))
+        # Build definition index from skeleton data (qualified keys, no duplicates, no ghosts)
+        self._rebuild_definitions()
 
     def inject_cached(self, rel_path: str, py_file: Path, source: bytes,
                       skeleton: list[dict], mtime: float):
@@ -117,12 +141,9 @@ class Indexer:
             language=py_file.suffix.lstrip("."),
             plugin=plugin,
         )
-        # Update definition index
-        for item in skeleton:
-            name = item["name"]
-            if name not in self._definitions:
-                self._definitions[name] = []
-            self._definitions[name].append((rel_path, item["line"]))
+        # Note: _definitions is NOT updated here. After all inject_cached() calls
+        # are complete, the caller must invoke _rebuild_definitions() to rebuild
+        # the definition index from _index (DATA-01, DATA-02, DATA-03 fix).
 
     def get_skeleton(self, rel_path: str) -> list[dict]:
         entry = self._index.get(rel_path)
@@ -165,10 +186,12 @@ class Indexer:
                     )
                     callee_keys = set()
                     for callee_name in callees:
-                        # Resolve callee to its definition location(s)
-                        if callee_name in self._definitions:
-                            for def_file, _ in self._definitions[callee_name]:
-                                callee_keys.add(f"{def_file}::{callee_name}")
+                        # O(1) lookup via secondary index (DATA-03 fix)
+                        qualified_keys = self._name_to_qualified.get(callee_name, [])
+                        if qualified_keys:
+                            for qk in qualified_keys:
+                                # qk is already "file::name", use directly
+                                callee_keys.add(qk)
                         else:
                             # External/unresolved — keep as bare name
                             callee_keys.add(f"?::{callee_name}")
@@ -247,8 +270,9 @@ class Indexer:
                         n_file = parts[0]
                         n_name = parts[1] if len(parts) > 1 else neighbor
                         n_line = 0
-                        if n_name in self._definitions:
-                            for def_file, def_line in self._definitions[n_name]:
+                        qualified_key = f"{n_file}::{n_name}"
+                        if qualified_key in self._definitions:
+                            for def_file, def_line in self._definitions[qualified_key]:
                                 if def_file == n_file:
                                     n_line = def_line
                                     break
