@@ -20,7 +20,11 @@ Two phases deliver the full hardening effort. Phase 1 eliminates the critical ri
   2. The `_in_transaction` flag can be read and written from multiple threads without a race condition
   3. Calling any file_path tool with `"../../../etc/passwd"` or an absolute path returns an error, not file content
   4. All existing 1070+ tests continue to pass after the fix
-**Plans**: TBD
+**Plans**: 2 plans
+
+Plans:
+- [ ] 01-01-PLAN.md — Add threading.Lock to GraphStore; concurrent-access regression tests
+- [ ] 01-02-PLAN.md — Add _validate_path to all file_path tools; path traversal regression tests
 
 ### Phase 2: Data Integrity
 **Goal**: The definition index reflects only current files with unique, qualified symbols, and plugin errors do not crash the server
@@ -38,5 +42,5 @@ Two phases deliver the full hardening effort. Phase 1 eliminates the critical ri
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. Critical Safety | 0/? | Not started | - |
+| 1. Critical Safety | 0/2 | Planned | - |
 | 2. Data Integrity | 0/? | Not started | - |
