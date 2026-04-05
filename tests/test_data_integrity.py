@@ -173,3 +173,114 @@ def test_name_to_qualified_secondary_index(tmp_path):
     assert "utils.py::add" in qualified, (
         f"utils.py::add missing from _name_to_qualified['add']: {qualified}"
     )
+
+
+# --- ROBUST-01: Plugin exception handling ---
+
+def test_plugin_exception_skips_file(tmp_path, monkeypatch):
+    """ROBUST-01: RuntimeError in extract_skeleton() skips that file with has_errors=True."""
+    before = tmp_path / "before.py"
+    crashing = tmp_path / "crashing.py"
+    after = tmp_path / "after.py"
+    before.write_text("def normal(): pass\n")
+    crashing.write_text("def boom(): pass\n")
+    after.write_text("def also_normal(): pass\n")
+
+    from codetree.registry import get_plugin
+
+    original_get_plugin = get_plugin
+
+    def patched_get_plugin(path):
+        plugin = original_get_plugin(path)
+        if plugin is None:
+            return None
+        if path.name == "crashing.py":
+            # Return a wrapped plugin that raises on extract_skeleton
+            class CrashingPlugin(type(plugin)):
+                def extract_skeleton(self, source):
+                    raise RuntimeError("Simulated plugin crash")
+            return CrashingPlugin()
+        return plugin
+
+    monkeypatch.setattr("codetree.indexer.get_plugin", patched_get_plugin)
+
+    indexer = Indexer(tmp_path)
+    # Must NOT raise:
+    indexer.build()
+
+    assert "before.py" in indexer._index, "before.py must be indexed"
+    assert "after.py" in indexer._index, "after.py must be indexed"
+    assert "crashing.py" in indexer._index, "crashing.py must be in index (with has_errors)"
+    crashing_entry = indexer._index["crashing.py"]
+    assert crashing_entry.has_errors is True, "crashing.py must have has_errors=True"
+    assert crashing_entry.skeleton == [], "crashing.py must have empty skeleton"
+
+
+def test_plugin_memoryerror_skips_file(tmp_path, monkeypatch):
+    """ROBUST-01: MemoryError in extract_skeleton() also skips that file gracefully."""
+    crashing = tmp_path / "huge.py"
+    crashing.write_text("def big(): pass\n")
+
+    from codetree.registry import get_plugin
+
+    original_get_plugin = get_plugin
+
+    def patched_get_plugin(path):
+        plugin = original_get_plugin(path)
+        if plugin is None:
+            return None
+        if path.name == "huge.py":
+            class MemCrashPlugin(type(plugin)):
+                def extract_skeleton(self, source):
+                    raise MemoryError("Simulated OOM")
+            return MemCrashPlugin()
+        return plugin
+
+    monkeypatch.setattr("codetree.indexer.get_plugin", patched_get_plugin)
+
+    indexer = Indexer(tmp_path)
+    indexer.build()  # Must not raise
+
+    entry = indexer._index.get("huge.py")
+    assert entry is not None
+    assert entry.has_errors is True
+    assert entry.skeleton == []
+
+
+def test_plugin_exception_server_continues_indexing(tmp_path, monkeypatch):
+    """ROBUST-01: files after a crashing file are still indexed."""
+    # Create files in alphabetical order so walk order is predictable
+    a_file = tmp_path / "aaa.py"
+    b_file = tmp_path / "bbb.py"
+    c_file = tmp_path / "ccc.py"
+    a_file.write_text("def alpha(): pass\n")
+    b_file.write_text("def beta(): pass\n")   # This one crashes
+    c_file.write_text("def gamma(): pass\n")
+
+    from codetree.registry import get_plugin
+
+    original_get_plugin = get_plugin
+
+    def patched_get_plugin(path):
+        plugin = original_get_plugin(path)
+        if plugin is None:
+            return None
+        if path.name == "bbb.py":
+            class CrashPlugin(type(plugin)):
+                def extract_skeleton(self, source):
+                    raise ValueError("boom")
+            return CrashPlugin()
+        return plugin
+
+    monkeypatch.setattr("codetree.indexer.get_plugin", patched_get_plugin)
+
+    indexer = Indexer(tmp_path)
+    indexer.build()
+
+    # aaa and ccc must be fully indexed with their symbols
+    assert "aaa.py" in indexer._index
+    assert "ccc.py" in indexer._index
+    aaa_names = [item["name"] for item in indexer._index["aaa.py"].skeleton]
+    ccc_names = [item["name"] for item in indexer._index["ccc.py"].skeleton]
+    assert "alpha" in aaa_names, f"alpha not found in aaa.py skeleton: {aaa_names}"
+    assert "gamma" in ccc_names, f"gamma not found in ccc.py skeleton: {ccc_names}"
