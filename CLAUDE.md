@@ -214,3 +214,286 @@ The tree-sitter Python bindings have breaking changes from older docs:
 - Indexer `SKIP_DIRS` includes `.venv`, `node_modules`, `__pycache__`, `.git` — without this, crawling `.venv` causes Claude Code timeout
 - FastMCP tool access in tests: `mcp.local_provider._components[f"tool:{name}@"].fn`
 - **Doc sync rule**: When tools are added, removed, or changed, update all 5 doc files: `README.md`, `TOOLS_GUIDE.md`, `LANDING_PAGE.md`, `CLAUDE.md`, `AGENTS.md`
+
+<!-- GSD:project-start source:PROJECT.md -->
+## Project
+
+**codetree Production Hardening**
+
+codetree is a Python MCP server that gives coding agents structured code understanding via tree-sitter. This hardening effort fixes critical and high-priority bugs discovered during a codebase audit — issues that cause agents to receive wrong data, crash the server, or expose security holes.
+
+**Core Value:** Every MCP tool call returns correct, trustworthy data — agents can rely on codetree without worrying about stale state, silent failures, or wrong results.
+
+### Constraints
+
+- **Testing**: All fixes must have tests; existing 1070 tests must continue passing
+- **Backward compat**: No changes to MCP tool signatures (agents already use them)
+- **Performance**: Server startup must stay under ~2s for typical repos
+<!-- GSD:project-end -->
+
+<!-- GSD:stack-start source:codebase/STACK.md -->
+## Technology Stack
+
+## Languages
+- Python 3.10+ - Core application language; MCP server and all indexing/analysis logic
+- Python (`.py`)
+- JavaScript/JSX (`.js`, `.jsx`)
+- TypeScript (`.ts`)
+- TypeScript JSX (`.tsx`)
+- Go (`.go`)
+- Rust (`.rs`)
+- Java (`.java`)
+- C (`.c`, `.h`)
+- C++ (`.cpp`, `.cc`, `.cxx`, `.hpp`, `.hh`)
+- Ruby (`.rb`)
+## Runtime
+- Python 3.10+ as base interpreter
+- Standard library modules: `pathlib`, `json`, `subprocess`, `sqlite3`, `argparse`, `atexit`, `hashlib`, `re`, `dataclasses`
+- pip (standard Python package manager)
+- Optional: `uv` for faster installation (recommended in README for Quick Start)
+- Lockfile: `.venv/` contains installed packages; no `requirements.txt` or `pyproject.lock` committed
+## Frameworks
+- FastMCP 3.1.0 (or later `>=2.0.0`) - MCP (Model Context Protocol) server framework
+- tree-sitter 0.23.0+ - AST parsing library (language-agnostic)
+- pytest (via GitHub Actions workflow, not explicitly in pyproject.toml dependencies but installed in CI)
+- hatchling (build backend)
+## Key Dependencies
+- tree-sitter (0.23.0+) - Core AST parsing; blocks everything else
+- fastmcp (2.0.0+) - MCP server registration and tool transport
+- tree-sitter-python, tree-sitter-javascript, tree-sitter-typescript, tree-sitter-go, tree-sitter-rust, tree-sitter-java, tree-sitter-c, tree-sitter-cpp, tree-sitter-ruby
+## Configuration
+- No explicit environment variables required for normal operation
+- `.codetree/` directory created in repository root for persistent data:
+- Startup: Command-line argument `--root /path/to/repo` specifies target codebase (default: current directory)
+- `pyproject.toml` - Single source of truth for dependencies, project metadata, build config
+- Python wheel built via hatchling (not in committed dist/)
+- CLI entrypoint: `codetree = "codetree.__main__:main"`
+## Platform Requirements
+- Python 3.10+ interpreter
+- pip or uv for package installation
+- `.venv/` virtual environment (created and activated via `source .venv/bin/activate`)
+- Git for accessing codebase metadata (used by `git_analysis.py` module)
+- ~150MB disk for installed dependencies (tree-sitter + language grammars)
+- Python 3.10+ on target system
+- No external services or databases required — SQLite is embedded
+- Runs as stdio-based MCP server in agent/IDE contexts (Claude Code, Cursor, VS Code, Windsurf)
+- Network: Optional — git history analysis uses local `git` command; no outbound network calls
+- Memory: ~50-100MB for typical codebases; scales with repository size
+- CPU: Single-threaded analysis; no async I/O (subprocess calls are blocking)
+## Storage Model
+- `.codetree/index.json` - JSON text file in target repo (human-readable, git-ignored)
+- `.codetree/graph.db` - SQLite 3 database (binary, git-ignored)
+- No cloud storage, no S3, no vector DB
+- Cache invalidated on file modification time (mtime) changes
+- Graph rebuilt incrementally on changes (sha256 content hashing)
+- Both are .gitignore'd to avoid committing analysis artifacts
+<!-- GSD:stack-end -->
+
+<!-- GSD:conventions-start source:CONVENTIONS.md -->
+## Conventions
+
+## Naming Patterns
+- Modules use lowercase with underscores: `indexer.py`, `registry.py`, `cache.py`
+- Plugin modules follow pattern: `{language}.py` (e.g., `python.py`, `javascript.py`, `base.py`)
+- Test files follow pattern: `test_{module}.py` (e.g., `test_indexer.py`, `test_server.py`)
+- Template file for new code: `_template.py` as boilerplate
+- Lowercase with underscores: `get_plugin()`, `extract_skeleton()`, `extract_symbol_source()`
+- Private/internal functions prefixed with underscore: `_matches()`, `_clean_doc()`, `_should_skip()`
+- Boolean predicates start with `is_` or `check_`: `check_syntax()`, `is_valid()`
+- Getter functions use `get_` prefix: `get_skeleton()`, `get_symbol()`, `get_imports()`
+- Setter functions use `set_` prefix: `set()` for simple assignment
+- Extraction functions use `extract_` prefix: `extract_skeleton()`, `extract_calls_in_function()`
+- MCP tool functions decorated with `@mcp.tool()` use clear action verbs: `get_file_skeleton()`, `find_references()`
+- Lowercase with underscores: `file_entry`, `rel_path`, `source`, `skeleton`
+- Class instances: `indexer`, `plugin`, `cache`, `store`
+- Dictionaries/collections singular or plural as appropriate: `results`, `definitions`, `call_graph`
+- Constants: UPPERCASE with underscores: `SKIP_DIRS`, `_EXCLUDED_NAMES`
+- Module-level parser/language globals: `_PARSER`, `_LANGUAGE`
+- Private instance variables: `_index`, `_definitions`, `_call_graph`, `_root`
+- Loop counters use full names not `i`: `for rel_path, entry in ...` or `for item in skeleton:`
+- Classes use PascalCase: `LanguagePlugin`, `FileEntry`, `Calculator`
+- Plugin classes follow pattern: `{Language}Plugin` (e.g., `PythonPlugin`, `JavaScriptPlugin`, `GoPlugin`)
+- Abstract base class: `LanguagePlugin` (ABC)
+- Dataclass fields documented inline with type hints and brief purpose
+- Type unions use modern syntax: `str | Path` not `Union[str, Path]`
+## Code Style
+- No automatic linter or formatter configured (`.eslintrc`, `.prettierrc`, `biome.json` not present)
+- Implicit convention: 4-space indentation (Python standard)
+- Line length: no strict limit enforced, but code is reasonably sized
+- Imports grouped: standard library, third-party, local
+- Blank lines: 2 between top-level definitions, 1 between methods
+- No linting tool configured in `pyproject.toml`
+- Code quality maintained through convention and testing
+- Type hints are used throughout: `extract_skeleton(source: bytes) -> list[dict]`
+## Import Organization
+- No path aliases configured (no `jsconfig.json`, `tsconfig.json` paths)
+- Relative imports used throughout: `from .indexer import ...`, `from ..graph.store import ...`
+- All paths are relative to package root: `src/codetree/`
+## Error Handling
+- Graceful degradation: functions return `None` or empty list on error, not exceptions
+- `extract_symbol_source(source, name) -> tuple[str, int] | None` returns None if symbol not found
+- `get_plugin(path) -> LanguagePlugin | None` returns None for unsupported extensions
+- `Cache.load()` catches `json.JSONDecodeError` and `OSError`, silently returns empty dict
+- Skeleton parsing catches no exceptions — invalid syntax captured via `plugin.check_syntax()` flag
+- String methods use `.decode("utf-8", errors="replace")` for safe UTF-8 handling across all languages
+- File not found cases return user-friendly strings: `f"File not found: {file_path}"`, `f"Symbol '{symbol_name}' not found in {file_path}"`
+- `_should_skip(path: Path) -> bool` checks directory names against `SKIP_DIRS` set
+- `is_valid(rel_path, current_mtime) -> bool` verifies cache freshness by mtime matching
+- Skeleton results deduplicated by `(name, line)` before returning
+- All paths validated as relative using pattern matching: no absolute paths in results
+## Logging
+- Print-based debugging in utility functions
+- No structured logging
+- Docstrings used for user-facing documentation of tool behavior
+## Comments
+- Class docstrings describe purpose and key responsibilities
+- Method docstrings describe what it does, args, return value, and any side effects
+- Inline comments rare — code is self-documenting via clear naming
+- Section separators used in large files: `# ── Section Name ──────────────────────────`
+- Not used (Python codebase)
+- Docstrings use triple quotes: `"""description."""`
+- Parameter and return documentation in docstring body
+## Function Design
+- Functions are small and focused: 10-50 lines typical
+- Extract helpers for complex operations: `_matches()`, `_fill_docs_from_siblings()`, `_clean_doc()`
+- Core extraction methods in plugins are 50-150 lines (complex query logic)
+- Main orchestration methods: `build()`, `create_server()` in 30-60 lines
+- Positional parameters for required inputs: `extract_skeleton(source: bytes)`
+- Keyword arguments with defaults for optional behavior: `format: str = "full"`
+- Path parameters as `str | Path` for flexibility, converted to `Path` internally
+- Multiple related params grouped: `extract_calls_in_function(source, fn_name)` not spread across calls
+- Return meaningful types: `list[dict]`, `tuple[str, int] | None`, `dict[str, Any]`
+- Return early on error/not-found: `if entry is None: return None`
+- Return collections always (not None): `extract_calls_in_function() -> list[str]` (empty list if none)
+- Tuples for related values: `extract_symbol_source() -> tuple[str, int] | None` (source + line)
+## Module Design
+- No explicit `__all__` lists; modules export all public (non-`_`) names
+- Plugin classes instantiated at module level: `PythonPlugin()`, shared via registry
+- Plugin registry: `PLUGINS: dict[str, LanguagePlugin]` in `registry.py`
+- No barrel/index files (`__init__.py` is minimal)
+- `src/codetree/__init__.py` is empty
+- Language plugins imported individually: `from .languages.python import PythonPlugin`
+- `indexer.py` — file discovery, parsing, skeleton building, cross-file analysis
+- `languages/*.py` — language-specific AST parsing and extraction
+- `server.py` — MCP tool registration and output formatting
+- `cache.py` — skeleton caching with mtime invalidation
+- `registry.py` — extension → plugin mapping
+- `graph/*.py` — persistent graph building, queries, analysis
+<!-- GSD:conventions-end -->
+
+<!-- GSD:architecture-start source:ARCHITECTURE.md -->
+## Architecture
+
+## Pattern Overview
+- **FastMCP 3.1.0 framework** - MCP tools exposed as JSON-RPC endpoints over stdio
+- **Multi-language plugin system** - Tree-sitter-based parsers for 10 languages (Python, JavaScript, TypeScript, Go, Rust, Java, C, C++, Ruby)
+- **Three-tier indexing** - File discovery → skeleton extraction → graph construction
+- **Persistent SQLite graph** - `.codetree/graph.db` for cross-session analysis without re-parsing
+- **Cache optimization** - `.codetree/index.json` with mtime-based invalidation to skip unchanged files
+## Layers
+- Purpose: Parse command-line arguments and invoke the server
+- Location: `src/codetree/__main__.py`
+- Contains: argparse setup, root directory resolution
+- Triggers: Called by `codetree --root /path/to/repo` command
+- Responsibilities: Accept `--root` argument, invoke `server.run()`
+- Purpose: Expose 23 MCP tools over FastMCP protocol
+- Location: `src/codetree/server.py`
+- Contains: Tool definitions, result formatting, caching/indexing/graph initialization
+- Depends on: Indexer, Cache, GraphStore, GraphQueries
+- Used by: Claude Code via stdio MCP transport
+- Key function: `create_server(root: str) → FastMCP`, `run(root: str)` entry point
+- Purpose: Discover all supported files, extract symbol skeletons, build definition/call graphs
+- Location: `src/codetree/indexer.py`
+- Contains: `Indexer` class with methods for skeleton, symbol source, references, call graphs, dead code, blast radius, clones, search
+- Depends on: Language plugins, registry
+- Used by: Server, GraphBuilder
+- Key dataclass: `FileEntry` (path, source, skeleton, mtime, language, plugin, has_errors)
+- Purpose: Store pre-computed skeletons with modification time checks to skip unchanged files
+- Location: `src/codetree/cache.py`
+- Contains: `Cache` class (load, save, get, set, is_valid methods)
+- Stores: `.codetree/index.json` (JSON dict of `rel_path → {mtime, skeleton}`)
+- Used by: Server on startup to inject cached entries into indexer
+- Purpose: Abstract language-specific AST parsing behind common interface
+- Location: `src/codetree/languages/`
+- Contains: 10 plugin classes inheriting from `LanguagePlugin` base
+- Each plugin implements:
+- Plugins: `PythonPlugin`, `JavaScriptPlugin`, `TypeScriptPlugin`, `TSXPlugin`, `GoPlugin`, `RustPlugin`, `JavaPlugin`, `CPlugin`, `CppPlugin`, `RubyPlugin`
+- Purpose: Route files to correct language plugin
+- Location: `src/codetree/registry.py`
+- Contains: `PLUGINS` dict (extension → singleton plugin instance), `get_plugin(path) → LanguagePlugin | None`
+- Used by: Indexer during file discovery
+- Purpose: Build and query a persistent SQLite symbol graph for cross-session analysis
+- Location: `src/codetree/graph/`
+- Components:
+## Data Flow
+## State Management
+- `_index: dict[rel_path → FileEntry]` - all indexed files (held in memory)
+- `_definitions: dict[name → list[(file, line)]]` - definition locations for all symbols
+- `_call_graph, _reverse_graph` - lazy-built, invalidated when files change
+- `_call_graph_built: bool` - flag to defer call graph construction until first use
+- Persistent SQLite database: `.codetree/graph.db`
+- Tables: `meta`, `files`, `symbols`, `edges`, `file_symbols_index`
+- Indices on: `symbols.name`, `symbols.file`, `symbols.kind`, `edges.source_qn`, `edges.target_qn`, `edges.type`
+- Schema version tracked in `meta` table
+- JSON file: `.codetree/index.json`
+- Structure: `{rel_path → {mtime: float, skeleton: list[dict]}}`
+- Invalidation: re-parse file if `stat().st_mtime` differs from cached mtime
+## Key Abstractions
+- Purpose: Define language-agnostic interface for code analysis
+- Methods: 5 abstract (skeleton, symbol_source, calls, usages, imports) + 5 optional (syntax, complexity, variables, ast, normalize_for_clones)
+- Example: `PythonPlugin` queries `function_definition` and `class_definition` tree-sitter nodes
+- Pattern: Tree-sitter 0.25.x API with `Query()`, `QueryCursor()`, `_matches()` unwrapper
+- Purpose: Hold all parsed information for a single file
+- Fields: path, source (bytes), skeleton, mtime, language, plugin, has_errors
+- Lifetime: Created during indexing, reused for all lookups without re-parsing
+- Purpose: Define persistent graph schema
+- SymbolNode: qualified_name, name, kind, file_path, start_line, end_line, parent_qn, doc, params, is_test, is_entry_point
+- Edge: source_qn, target_qn, type (CALLS, IMPORTS, CONTAINS), weight
+- Qualified names: `file_path::ClassName.method_name` or `file_path::function_name`
+- Purpose: Execute AST queries via S-expression patterns
+- Pattern: Define queries as strings: `(function_definition name: (identifier) @name)`
+- Matches returned as dicts with capture names unwrapped to nodes
+- Helper: `_matches(query, node)` in `languages/base.py` for convenient capture unwrapping
+## Entry Points
+- Location: `src/codetree/__main__.py::main()`
+- Triggers: `codetree --root /path/to/repo`
+- Responsibilities: Parse args, invoke `server.run(root)`
+- **Structural:** `get_file_skeleton`, `get_symbol`, `find_references`, `get_call_graph`, `get_imports`, `get_skeletons`, `get_symbols`, `get_complexity`, `find_dead_code`, `get_blast_radius`, `detect_clones`, `search_symbols`, `find_tests`
+- **Graph & Onboarding:** `index_status`, `get_repository_map`, `resolve_symbol`, `search_graph`, `get_change_impact`, `analyze_dataflow`, `find_hot_paths`, `get_dependency_graph`, `git_history`, `suggest_docs`
+- All registered as `@mcp.tool()` decorators in `server.py`
+## Error Handling
+- File not found: `"File not found or empty: {file_path}"`
+- Symbol not found: `"Symbol '{name}' not found in {file_path}"`
+- Syntax error: Skeleton includes warning header if `entry.has_errors == True`
+- Empty results: `"No {X} found..."`
+## Cross-Cutting Concerns
+- File paths: Checked for existence in indexer during build
+- Symbol names: Case-sensitive searches; substring matching optional in `search_symbols`
+- Imports: Extracted as raw text; no semantic resolution (cross-module imports tracked by edge weights)
+- Skeleton cache: mtime-based invalidation per file
+- Call graph: Lazy-built once, invalidated on file change via `_call_graph_built` flag
+- Graph store: Content-hashed (sha256) per file to detect changes
+- Import resolution: Graph builder caches file imports in `_file_imports` dict
+- Excludes dunder methods (`__init__`, `__str__`, etc.), test functions, `__init__.py` exports
+- Counts external references only (same-file definitions at definition line don't count as usage)
+<!-- GSD:architecture-end -->
+
+<!-- GSD:workflow-start source:GSD defaults -->
+## GSD Workflow Enforcement
+
+Before using Edit, Write, or other file-changing tools, start work through a GSD command so planning artifacts and execution context stay in sync.
+
+Use these entry points:
+- `/gsd:quick` for small fixes, doc updates, and ad-hoc tasks
+- `/gsd:debug` for investigation and bug fixing
+- `/gsd:execute-phase` for planned phase work
+
+Do not make direct repo edits outside a GSD workflow unless the user explicitly asks to bypass it.
+<!-- GSD:workflow-end -->
+
+<!-- GSD:profile-start -->
+## Developer Profile
+
+> Profile not yet configured. Run `/gsd:profile-user` to generate your developer profile.
+> This section is managed by `generate-claude-profile` -- do not edit manually.
+<!-- GSD:profile-end -->

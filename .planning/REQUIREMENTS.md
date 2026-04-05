@@ -59,19 +59,19 @@
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| CONC-01 | — | Pending |
-| CONC-02 | — | Pending |
-| SEC-01 | — | Pending |
-| DATA-01 | — | Pending |
-| DATA-02 | — | Pending |
-| DATA-03 | — | Pending |
-| ROBUST-01 | — | Pending |
+| CONC-01 | Phase 1 | Pending |
+| CONC-02 | Phase 1 | Pending |
+| SEC-01 | Phase 1 | Pending |
+| DATA-01 | Phase 2 | Pending |
+| DATA-02 | Phase 2 | Pending |
+| DATA-03 | Phase 2 | Pending |
+| ROBUST-01 | Phase 2 | Pending |
 
 **Coverage:**
 - v1 requirements: 7 total
-- Mapped to phases: 0
-- Unmapped: 7 (awaiting roadmap)
+- Mapped to phases: 7
+- Unmapped: 0
 
 ---
 *Requirements defined: 2026-04-05*
-*Last updated: 2026-04-05 after initial definition*
+*Last updated: 2026-04-05 after roadmap creation*
