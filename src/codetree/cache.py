@@ -9,9 +9,12 @@ class Cache:
         self._data: dict = {}
 
     def load(self):
-        """Load cache from disk. No-op if cache file doesn't exist."""
+        """Load cache from disk. No-op if cache file doesn't exist or is corrupt."""
         if self._cache_file.exists():
-            self._data = json.loads(self._cache_file.read_text())
+            try:
+                self._data = json.loads(self._cache_file.read_text())
+            except (json.JSONDecodeError, OSError):
+                self._data = {}
 
     def save(self):
         """Write cache to disk, creating .codetree/ directory if needed."""
